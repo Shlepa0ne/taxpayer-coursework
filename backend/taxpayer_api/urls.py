@@ -19,5 +19,10 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Основные эндпоинты нашего приложения
     path('api/', include('api.urls')),
+    # Эндпоинты для аутентификации (login, logout, password reset)
+    path('api/auth/', include('dj_rest_auth.urls')),
+    # Эндпоинты для регистрации
+    path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
 ]

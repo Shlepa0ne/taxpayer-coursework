@@ -1,8 +1,10 @@
+# Импортируем permission-классы
 from rest_framework import generics
-from rest_framework.views import APIView # Импортируем базовый класс для View
-from rest_framework.response import Response # Для формирования HTTP-ответов
-from rest_framework import status # Для использования HTTP-статусов
-from django.db import connection # Импортируем для прямого выполнения SQL
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated # Добавляем импорт
+from django.db import connection
 from .models import Taxpayer
 from .serializers import TaxpayerSerializer, RiskScoreInputSerializer, RiskScoreOutputSerializer
 
@@ -13,6 +15,7 @@ class TaxpayerListAPIView(generics.ListAPIView):
     """
     queryset = Taxpayer.objects.all()
     serializer_class = TaxpayerSerializer
+    permission_classes = [IsAuthenticated] # Только для аутентифицированных пользователей
 
 class TaxpayerDetailAPIView(generics.RetrieveAPIView):
     """
@@ -21,6 +24,7 @@ class TaxpayerDetailAPIView(generics.RetrieveAPIView):
     """
     queryset = Taxpayer.objects.all()
     serializer_class = TaxpayerSerializer
+    permission_classes = [IsAuthenticated] # Только для аутентифицированных пользователей
 
 class CalculateRiskScoreAPIView(APIView):
     """
@@ -28,6 +32,8 @@ class CalculateRiskScoreAPIView(APIView):
     Принимает POST-запрос с 'taxpayer_id'.
     POST /api/calculate-risk-score/
     """
+    permission_classes = [IsAuthenticated] # Только для аутентифицированных пользователей
+
     def post(self, request, *args, **kwargs):
         # 1. Валидация входных данных с помощью сериализатора
         input_serializer = RiskScoreInputSerializer(data=request.data)

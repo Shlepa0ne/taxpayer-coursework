@@ -41,10 +41,26 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites', # required by allauth
+    
+    # Third-party apps
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
+    
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
+    
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    
+    'rest_framework_simplejwt',
+
+    # Local apps
     'api',
 ]
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -55,6 +71,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'taxpayer_api.urls'
@@ -138,3 +155,23 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+# Настройки Django REST Framework для аутентификации
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        # Указываем, что по умолчанию аутентификация будет происходить через JWT
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+# Для работы django.contrib.sites
+SITE_ID = 1
+
+# Временная заглушка для вывода писем в консоль (нужно для регистрации)
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Указываем бэкенды аутентификации (стандартный + от allauth)
+AUTHENTICATION_BACKENDS = (
+    'django.contrib.auth.backends.ModelBackend', # стандартный
+    'allauth.account.auth_backends.AuthenticationBackend', # от allauth
+)
