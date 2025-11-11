@@ -6,22 +6,25 @@ const AuthContext = createContext(null);
 
 // 2. Создаем компонент-провайдер. Он будет "оберткой" для всего приложения.
 export const AuthProvider = ({ children }) => {
-  // Храним токен в состоянии. Начальное значение берем из localStorage.
-  const [token, setToken] = useState(localStorage.getItem('accessToken'));
+// Храним токен в состоянии. Начальное значение берем из localStorage.
+const [token, setToken] = useState(localStorage.getItem('accessToken'));
 
-  // Функция для входа в систему
-  const login = async (username, password) => {
-        try {
-          const data = await apiLogin(username, password);
-          // Сохраняем токен доступа в состоянии
-          setToken(data.key); // <--- ИЗМЕНЕНИЕ
-          // Сохраняем токен доступа в localStorage, чтобы он не пропадал при перезагрузке
-          localStorage.setItem('accessToken', data.key); // <--- ИЗМЕНЕНИЕ
-        } catch (error) {
-          // ...
-        }
-      };
-
+// Функция для входа в систему
+const login = async (username, password) => {
+    try {
+      const data = await apiLogin(username, password);
+      setToken(data.access);
+      localStorage.setItem('accessToken', data.access);
+      // Возвращаем true в случае успеха для обработки в UI
+      return true; 
+    } catch (error) {
+      console.error("Login failed:", error.response?.data || error.message);
+      // Очищаем токен на случай, если там было что-то невалидное
+      logout();
+      // Возвращаем false для обработки в UI (например, показать сообщение об ошибке)
+      return false;
+    }
+  };
 
   // Функция для выхода из системы
   const logout = () => {

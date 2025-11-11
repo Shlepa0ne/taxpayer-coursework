@@ -24,7 +24,7 @@ load_dotenv()
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-4=$d(+vit&e2hyxhwg+#3s@6$hrvodu(a!!dil2rz=4o$f4fa6'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -62,15 +62,15 @@ INSTALLED_APPS = [
 ]
 
 
-MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
+MIDDLEWARE = [    
+    'django.middleware.security.SecurityMiddleware',    
+    'django.contrib.sessions.middleware.SessionMiddleware',    
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',    
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',    
     'allauth.account.middleware.AccountMiddleware',
 ]
 
@@ -156,12 +156,22 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
+# Явно разрешаем принимать заголовок Authorization
+CORS_ALLOW_HEADERS = [
+    'authorization',
+    'content-type',
+]
+
 # Настройки Django REST Framework для аутентификации
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        # Указываем, что по умолчанию аутентификация будет происходить через JWT
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+}
+
+# Настройки для Simple JWT
+SIMPLE_JWT = {
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # Для работы django.contrib.sites
@@ -175,3 +185,27 @@ AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend', # стандартный
     'allauth.account.auth_backends.AuthenticationBackend', # от allauth
 )
+
+DJ_REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_COOKIE': None, # Токен передается только через заголовок
+    'JWT_AUTH_HEADER_PREFIX': 'Bearer',
+    'TOKEN_MODEL': None,
+    'SESSION_LOGIN': False,
+    'SERIALIZERS': {
+        'LOGIN_SERIALIZER': 'dj_rest_auth.registration.serializers.JWTSerializerWithUserDetails',
+        'USER_DETAILS_SERIALIZER': 'api.serializers.UserDetailsSerializer',
+    }
+}
+
+
+# Настройки allauth
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_EMAIL_VERIFICATION = 'none'
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_LOGIN_METHODS = ['username', 'email']
+ACCOUNT_SIGNUP_FIELDS = {
+    "username": True,
+    "email": True,
+}
+ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = False

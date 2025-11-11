@@ -43,3 +43,15 @@ export const getTaxpayers = async () => {
         throw error;
     }
 }
+
+// Функция для вызова расчета RiskScore
+export const calculateRiskScore = async (taxpayerId) => {
+    try {
+        const response = await apiClient.post('/calculate-risk-score/', {
+            taxpayer_id: taxpayerId,
+        });
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+}

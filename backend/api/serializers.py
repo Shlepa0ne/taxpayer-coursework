@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Taxpayer
+from django.contrib.auth import get_user_model
 
 class TaxpayerSerializer(serializers.ModelSerializer):
     """
@@ -24,3 +25,18 @@ class RiskScoreOutputSerializer(serializers.Serializer):
     Сериализатор для представления выходных данных: рассчитанного RiskScore.
     """
     risk_score = serializers.IntegerField(help_text="Рассчитанный RiskScore")
+
+# Получаем активную модель пользователя Django
+User = get_user_model()
+
+class UserDetailsSerializer(serializers.ModelSerializer):
+    """
+    Сериализатор для модели пользователя. 
+    Будет использоваться для отображения информации о пользователе при логине.
+    """
+    class Meta:
+        model = User
+        # Явно перечисляем поля, которые хотим видеть в ответе
+        fields = ('pk', 'username', 'email', 'first_name', 'last_name')
+        # Указываем, что все эти поля только для чтения
+        read_only_fields = fields
