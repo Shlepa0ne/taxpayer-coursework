@@ -1,27 +1,29 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // Импортируем хук для навигации
-import { useAuth } from '../context/AuthContext'; // Импортируем наш кастомный хук
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   
-  const { login } = useAuth(); // Получаем функцию login из контекста
-  const navigate = useNavigate(); // Получаем функцию для перенаправления
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
     try {
-      await login(username, password); // Вызываем login из контекста
-      navigate('/'); // В случае успеха - перенаправляем на главную страницу
+      await login(username, password);
+      // После успешного логина перенаправляем на главную
+      navigate('/'); 
     } catch (err) {
-      setError('Неверное имя пользователя или пароль.');
+      // Ошибка будет проброшена из AuthContext
+      setError('Неверные учетные данные. Пожалуйста, попробуйте снова.');
       console.error('Ошибка входа:', err);
     }
   };
+
 
   return (
     <div>

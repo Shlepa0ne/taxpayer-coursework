@@ -1,51 +1,60 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { login as apiLogin } from '../api/apiService'; // Переименовываем импорт, чтобы избежать конфликта имен
+import React, { createContext, useState, useContext } from 'react';
+import { login as apiLogin } from '../api/authApi';
 
-// 1. Создаем сам контекст
 const AuthContext = createContext(null);
 
-// 2. Создаем компонент-провайдер. Он будет "оберткой" для всего приложения.
 export const AuthProvider = ({ children }) => {
-// Храним токен в состоянии. Начальное значение берем из localStorage.
-const [token, setToken] = useState(localStorage.getItem('accessToken'));
+  // Инициализируем состояние из localStorage
+  const [authTokens, setAuthTokens] = useState(() => 
+    localStorage.getItem('authTokens')
+      ? JSON.parse(localStorage.getItem('authTokens'))
+      : null
+  );
 
-// Функция для входа в систему
-const login = async (username, password) => {
+  // Функция для входа в систему
+  const login = async (username, password) => {
     try {
+      // simple-jwt возвращает объект { access, refresh }
       const data = await apiLogin(username, password);
-      setToken(data.access);
-      localStorage.setItem('accessToken', data.access);
-      // Возвращаем true в случае успеха для обработки в UI
-      return true; 
+      
+      // Сохраняем оба токена
+      setAuthTokens(data);
+      localStorage.setItem('authTokens', JSON.stringify(data));
+      
     } catch (error) {
-      console.error("Login failed:", error.response?.data || error.message);
-      // Очищаем токен на случай, если там было что-то невалидное
+      console.error("Login failed:", error);
+      // При ошибке очищаем токены
       logout();
-      // Возвращаем false для обработки в UI (например, показать сообщение об ошибке)
-      return false;
+      // Пробрасываем ошибку дальше, чтобы компонент LoginPage мог ее обработать
+      throw error;
     }
   };
 
   // Функция для выхода из системы
   const logout = () => {
-    // Очищаем состояние
-    setToken(null);
-    // Очищаем localStorage
-    localStorage.removeItem('accessToken');
+    setAuthTokens(null);
+    localStorage.removeItem('authTokens');
+    // В будущем здесь будет запрос к API для инвалидации refresh-токена
   };
 
   // Значение, которое будет доступно всем дочерним компонентам
-  const value = {
-    token,
+  const contextValue = {
+    // Предоставляем только accessToken для использования в заголовках
+    accessToken: authTokens?.access,
     login,
     logout,
-    isAuthenticated: !!token, // Удобный флаг, чтобы проверять, есть ли токен
+    // Флаг isAuthenticated теперь зависит от наличия токенов в состоянии
+    isAuthenticated: !!authTokens,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
-// 3. Создаем кастомный хук для удобного доступа к контексту
+// Кастомный хук для удобного доступа к контексту
 export const useAuth = () => {
   return useContext(AuthContext);
 };
