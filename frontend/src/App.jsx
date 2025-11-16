@@ -1,29 +1,58 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import Spinner from './components/ui/Spinner'; // Нам понадобится спиннер
 
-// Компонент-обертка для защищенных роутов
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
-  
-  // Если пользователь не аутентифицирован, перенаправляем его на страницу входа
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-  
-  // Если аутентифицирован, показываем запрошенный компонент
   return children;
 }
 
 function App() {
+  const { accessToken, logout } = useAuth();
+  const [isVerifying, setIsVerifying] = useState(true); // Состояние проверки
+
+  useEffect(() => {
+    // Эта функция будет проверять валидность сессии при загрузке приложения
+    const verifySession = async () => {
+      if (accessToken) {
+        try {
+          // Мы можем декодировать токен, чтобы проверить срок его действия на клиенте
+          // Это быстрее, чем делать запрос к API
+          const payload = JSON.parse(atob(accessToken.split('.')[1]));
+          const expirationTime = payload.exp * 1000; // в миллисекундах
+          
+          if (Date.now() >= expirationTime) {
+            // Если access токен истек, мы могли бы здесь запустить silent refresh,
+            // но для простоты и надежности при холодном старте - просто выходим.
+            // Наш axios interceptor позаботится об обновлении во время активной сессии.
+            console.log("Access token expired on load, logging out.");
+            await logout();
+          }
+        } catch (e) {
+          console.error("Invalid token on load, logging out.", e);
+          await logout();
+        }
+      }
+      setIsVerifying(false); // Завершаем проверку
+    };
+
+    verifySession();
+  }, [accessToken, logout]); // Зависим от токена
+
+  // Пока идет проверка, показываем глобальный спиннер
+  if (isVerifying) {
+    return <Spinner />;
+  }
+
   return (
     <Routes>
-      {/* Публичный роут: страница входа */}
       <Route path="/login" element={<LoginPage />} />
-
-      {/* Защищенный роут: главная панель */}
       <Route 
         path="/" 
         element={
@@ -32,8 +61,6 @@ function App() {
           </ProtectedRoute>
         } 
       />
-      
-      {/* Можно добавить роут для "страница не найдена" */}
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

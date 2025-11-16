@@ -9,7 +9,12 @@ class TaxpayerSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = Taxpayer
-        fields = '__all__'
+        fields = [
+            'taxpayer_id',
+            'full_name', 
+            'short_name', 
+            'inn',
+        ]
 
 class RiskScoreInputSerializer(serializers.Serializer):
     """

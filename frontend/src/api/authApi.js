@@ -1,6 +1,6 @@
 import axiosInstance from './axiosInstance';
 
-// Функция для выполнения входа в систему
+// Функция для входа в систему
 export const login = async (username, password) => {
   const { data } = await axiosInstance.post('/auth/token/', {
     username,
@@ -9,4 +9,17 @@ export const login = async (username, password) => {
   return data;
 };
 
-// В будущем здесь будут refreshToken, logout и т.д.
+// Функция для обновления токена с помощью refresh токена
+export const refreshToken = async (refresh) => {
+  const { data } = await axiosInstance.post('/auth/token/refresh/', {
+    refresh,
+  });
+  return data;
+};
+
+// Функция для безопасного выхода (добавляет refresh токен в черный список)
+export const logout = async (refresh) => {
+  await axiosInstance.post('/auth/logout/', {
+    refresh,
+  });
+};

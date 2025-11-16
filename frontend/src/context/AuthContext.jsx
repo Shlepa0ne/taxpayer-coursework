@@ -1,49 +1,44 @@
 import React, { createContext, useState, useContext } from 'react';
-import { login as apiLogin } from '../api/authApi';
+import { login as apiLogin, logout as apiLogout } from '../api/authApi';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  // Инициализируем состояние из localStorage
-  const [authTokens, setAuthTokens] = useState(() => 
+  const [authTokens, setAuthTokens] = useState(() =>
     localStorage.getItem('authTokens')
       ? JSON.parse(localStorage.getItem('authTokens'))
       : null
   );
 
-  // Функция для входа в систему
   const login = async (username, password) => {
     try {
-      // simple-jwt возвращает объект { access, refresh }
       const data = await apiLogin(username, password);
-      
-      // Сохраняем оба токена
       setAuthTokens(data);
       localStorage.setItem('authTokens', JSON.stringify(data));
-      
     } catch (error) {
-      console.error("Login failed:", error);
-      // При ошибке очищаем токены
-      logout();
-      // Пробрасываем ошибку дальше, чтобы компонент LoginPage мог ее обработать
       throw error;
     }
   };
 
-  // Функция для выхода из системы
-  const logout = () => {
-    setAuthTokens(null);
-    localStorage.removeItem('authTokens');
-    // В будущем здесь будет запрос к API для инвалидации refresh-токена
+  const logout = async () => {
+    try {
+      const tokenString = localStorage.getItem('authTokens');
+      const refreshToken = tokenString ? JSON.parse(tokenString).refresh : null;
+      if (refreshToken) {
+        await apiLogout(refreshToken);
+      }
+    } catch (error) {
+      console.error("Ошибка при выходе на сервере:", error);
+    } finally {
+      setAuthTokens(null);
+      localStorage.removeItem('authTokens');
+    }
   };
 
-  // Значение, которое будет доступно всем дочерним компонентам
   const contextValue = {
-    // Предоставляем только accessToken для использования в заголовках
     accessToken: authTokens?.access,
     login,
     logout,
-    // Флаг isAuthenticated теперь зависит от наличия токенов в состоянии
     isAuthenticated: !!authTokens,
   };
 
@@ -54,7 +49,6 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// Кастомный хук для удобного доступа к контексту
 export const useAuth = () => {
   return useContext(AuthContext);
 };
