@@ -1,10 +1,11 @@
 import axios from 'axios';
 
+// Создаем экземпляр axios
 const axiosInstance = axios.create({
   baseURL: 'http://localhost:8000/api',
 });
 
-// Перехватчик запросов
+// Перехватчик запросов для добавления токена
 axiosInstance.interceptors.request.use(
   (config) => {
     const tokenString = localStorage.getItem('authTokens');
@@ -17,13 +18,17 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Перехватчик ответов
+// Перехватчик ответов для обработки ошибок авторизации
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const url = originalRequest.url;
 
-    if (error.response.status === 401 && !originalRequest._retry) {
+    // Исключаем эндпоинты аутентификации из логики обновления токена
+    const isAuthEndpoint = url.includes('/auth/token/') || url.includes('/auth/logout/');
+
+    if (error.response.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
 
       try {
@@ -31,6 +36,7 @@ axiosInstance.interceptors.response.use(
         const oldRefreshToken = tokenString ? JSON.parse(tokenString).refresh : null;
 
         if (!oldRefreshToken) {
+          // Если refresh токена нет, перенаправляем на логин
           window.location.href = '/login';
           return Promise.reject(error);
         }
@@ -43,18 +49,21 @@ axiosInstance.interceptors.response.use(
         const newTokens = response.data;
 
         localStorage.setItem('authTokens', JSON.stringify(newTokens));
+        axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${newTokens.access}`;
         originalRequest.headers['Authorization'] = `Bearer ${newTokens.access}`;
 
         // Повторяем оригинальный запрос с новым токеном
         return axiosInstance(originalRequest);
 
       } catch (refreshError) {
+        // Очищаем хранилище и перенаправляем на логин при ошибке обновления
         localStorage.removeItem('authTokens');
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }
     
+    // Возвращаем ошибку для всех остальных случаев
     return Promise.reject(error);
   }
 );

@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+
+// Импортируем все наши страницы
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
-import Spinner from './components/ui/Spinner'; // Нам понадобится спиннер
+import MyTaxesPage from './pages/MyTaxesPage';
+import TaxReduceRequestPage from './pages/TaxReduceRequestPage';
+import Spinner from './components/ui/Spinner';
 
+// Компонент-обертка для защиты роутов. Остается без изменений.
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) {
@@ -15,53 +20,50 @@ function ProtectedRoute({ children }) {
 
 function App() {
   const { accessToken, logout } = useAuth();
-  const [isVerifying, setIsVerifying] = useState(true); // Состояние проверки
+  const [isVerifying, setIsVerifying] = useState(true);
 
+  // Логика проверки сессии остается без изменений.
   useEffect(() => {
-    // Эта функция будет проверять валидность сессии при загрузке приложения
     const verifySession = async () => {
       if (accessToken) {
         try {
-          // Мы можем декодировать токен, чтобы проверить срок его действия на клиенте
-          // Это быстрее, чем делать запрос к API
           const payload = JSON.parse(atob(accessToken.split('.')[1]));
-          const expirationTime = payload.exp * 1000; // в миллисекундах
-          
+          const expirationTime = payload.exp * 1000;
           if (Date.now() >= expirationTime) {
-            // Если access токен истек, мы могли бы здесь запустить silent refresh,
-            // но для простоты и надежности при холодном старте - просто выходим.
-            // Наш axios interceptor позаботится об обновлении во время активной сессии.
-            console.log("Access token expired on load, logging out.");
             await logout();
           }
         } catch (e) {
-          console.error("Invalid token on load, logging out.", e);
           await logout();
         }
       }
-      setIsVerifying(false); // Завершаем проверку
+      setIsVerifying(false);
     };
-
     verifySession();
-  }, [accessToken, logout]); // Зависим от токена
+  }, [accessToken, logout]);
 
-  // Пока идет проверка, показываем глобальный спиннер
   if (isVerifying) {
     return <Spinner />;
   }
 
+  // Обновленная система роутинга.
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      
+      {/* Все защищенные роуты теперь являются дочерними для одного общего роута */}
       <Route 
-        path="/" 
+        path="/*" // Звездочка означает "все, что не /login"
         element={
           <ProtectedRoute>
+            {/* Каркас Dashboard теперь рендерится для всех страниц кабинета */}
             <DashboardPage />
           </ProtectedRoute>
-        } 
-      />
-      <Route path="*" element={<Navigate to="/" />} />
+        }
+      >
+        {/* Это вложенные (дочерние) роуты. Они будут рендериться внутри <Outlet /> в DashboardPage. */}
+        <Route index element={<MyTaxesPage />} /> {/* index === path="/" */}
+        <Route path="new-request" element={<TaxReduceRequestPage />} />
+      </Route>
     </Routes>
   );
 }

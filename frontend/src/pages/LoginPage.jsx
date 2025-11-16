@@ -30,7 +30,7 @@ function LoginPage() {
       <h1>Страница входа</h1>      
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="username">Имя пользователя:</label>
+          <label htmlFor="username">ИНН (идентификационный номер налогоплательщика):</label>
           <input
             id="username"
             name="username"
