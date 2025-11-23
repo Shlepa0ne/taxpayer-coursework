@@ -5602,4 +5602,3 @@ ALTER TABLE ONLY public.object_ownership
 --
 -- PostgreSQL database dump complete
 --
-

@@ -29,3 +29,7 @@ class ReduceBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReduceBase
         fields = ['reduce_base_id', 'reduce_base_name']
+
+class LoginSerializer(serializers.Serializer):
+    inn = serializers.CharField(max_length=32)
+    password = serializers.CharField(write_only=True)

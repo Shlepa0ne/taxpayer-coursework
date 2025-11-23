@@ -76,3 +76,21 @@ class TaxReduceRequest(models.Model):
     class Meta:
         managed = False
         db_table = 'tax_reduce_request'
+
+
+class TaxpayerAuth(models.Model):
+    inn = models.CharField(max_length=32, primary_key=True)  # INN как уникальный идентификатор
+    password_hash = models.CharField(max_length=512)        # хеш пароля
+
+    class Meta:
+        managed = False
+        db_table = 'taxpayer_auth'  # имя таблицы в БД
+
+
+class WorkerAuth(models.Model):
+    inn = models.CharField(max_length=32, primary_key=True)
+    password_hash = models.CharField(max_length=512)
+
+    class Meta:
+        managed = False
+        db_table = 'worker_auth'

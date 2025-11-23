@@ -1,18 +1,25 @@
-from rest_framework import generics, status, serializers
+from rest_framework import generics, status, serializers, permissions, serializers
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import connection
 from django.utils import timezone
-from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, ReportStatus, TaxOfficer, ReduceType
+from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, ReportStatus, TaxOfficer, ReduceType, TaxpayerAuth, WorkerAuth
 from .serializers import (
     TaxpayerSerializer,
     TaxAccrualSerializer,
     TaxReduceRequestSerializer,
     RiskScoreInputSerializer,
     RiskScoreOutputSerializer,
-    ReduceBaseSerializer
+    ReduceBaseSerializer,
+    LoginSerializer
 )
+from django.contrib.auth.hashers import check_password
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.response import Response
+
 
 class TaxpayerListAPIView(generics.ListAPIView):
     queryset = Taxpayer.objects.all()
@@ -87,3 +94,110 @@ class CreateTaxReduceRequestAPIView(generics.CreateAPIView):
             raise serializers.ValidationError("Сотрудник по умолчанию (ID=1) не найден.")
         except ReduceType.DoesNotExist:
             raise serializers.ValidationError("Тип снижения по умолчанию (ID=1) не найден.")
+        
+
+def _make_tokens_for_inn(inn: str, user_type: str):
+    """
+    Возвращает словарь с refresh и access токенами (строки).
+    Мы не привязываем токен к Django User — добавляем нужные claim'ы.
+    """
+    refresh = RefreshToken()  # создаёт новый RefreshToken
+    # кастомные claims:
+    refresh['inn'] = inn
+    refresh['user_type'] = user_type
+    # access — вложенный токен:
+    access = refresh.access_token
+    return {
+        'refresh': str(refresh),
+        'access': str(access)
+    }
+
+
+class TaxpayerLoginAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        inn = serializer.validated_data['inn']
+        password = serializer.validated_data['password']
+
+        try:
+            cred = TaxpayerAuth.objects.get(pk=inn)
+        except TaxpayerAuth.DoesNotExist:
+            return Response({'detail': 'Неверный INN или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not check_password(password, cred.password_hash):
+            return Response({'detail': 'Неверный INN или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        tokens = _make_tokens_for_inn(inn, 'taxpayer')
+        return Response({
+                "refresh": tokens["refresh"],
+                "access": tokens["access"],
+                "role": "taxpayer"
+            }, status=status.HTTP_200_OK)
+
+
+class WorkerLoginAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        inn = serializer.validated_data['inn']
+        password = serializer.validated_data['password']
+
+        try:
+            cred = WorkerAuth.objects.get(pk=inn)
+        except WorkerAuth.DoesNotExist:
+            return Response({'detail': 'Неверный INN или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not check_password(password, cred.password_hash):
+            return Response({'detail': 'Неверный INN или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        tokens = _make_tokens_for_inn(inn, 'worker')
+        return Response({
+                "refresh": tokens["refresh"],
+                "access": tokens["access"],
+                "role": "worker"
+            }, status=status.HTTP_200_OK)
+    
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """
+    Refresh, который возвращает access/refresh с inn и user_type.
+    """
+    def post(self, request, *args, **kwargs):
+        refresh_token = request.data.get("refresh")
+
+        if not refresh_token:
+            return Response({"detail": "Refresh token отсутствует"}, status=400)
+
+        try:
+            refresh = RefreshToken(refresh_token)
+        except Exception:
+            return Response({"detail": "Неверный refresh токен"}, status=400)
+
+        # старые claim'ы берём из refresh токена:
+        inn = refresh.get("inn")
+        user_type = refresh.get("user_type")
+
+        if not inn or not user_type:
+            return Response({"detail": "Refresh токен не содержит данные пользователя"}, status=400)
+
+        # генерируем новый refresh
+        new_refresh = RefreshToken()
+        new_refresh["inn"] = inn
+        new_refresh["user_type"] = user_type
+
+        # новый access
+        access = new_refresh.access_token
+
+        return Response({
+            "refresh": str(new_refresh),
+            "access": str(access),
+            "inn": inn,
+            "user_type": user_type
+        })

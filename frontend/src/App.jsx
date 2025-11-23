@@ -4,10 +4,12 @@ import { useAuth } from './context/AuthContext';
 
 // Импортируем все наши страницы
 import LoginPage from './pages/LoginPage';
+import LoginWorkersPage from './pages/LoginWorkersPage';
 import DashboardPage from './pages/DashboardPage';
 import MyTaxesPage from './pages/MyTaxesPage';
 import TaxReduceRequestPage from './pages/TaxReduceRequestPage';
 import Spinner from './components/ui/Spinner';
+import WorkersDashboardPlaceholder from './pages/WorkersDashboardPlaceholder';
 
 // Компонент-обертка для защиты роутов. Остается без изменений.
 function ProtectedRoute({ children }) {
@@ -49,6 +51,16 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/login-workers" element={<LoginWorkersPage/>} />
+
+      <Route 
+        path="/worker" 
+        element={
+          <ProtectedRoute>
+            <WorkersDashboardPlaceholder />
+          </ProtectedRoute>
+        }
+      />
       
       {/* Все защищенные роуты теперь являются дочерними для одного общего роута */}
       <Route 

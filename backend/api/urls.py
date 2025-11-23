@@ -6,6 +6,9 @@ from .views import (
     MyTaxAccrualsAPIView,
     CreateTaxReduceRequestAPIView,
     ReduceBaseListAPIView,
+    TaxpayerLoginAPIView, 
+    WorkerLoginAPIView,
+    CustomTokenRefreshView
 )
 
 urlpatterns = [
@@ -18,4 +21,7 @@ urlpatterns = [
     path('my-accruals/', MyTaxAccrualsAPIView.as_view(), name='my-accruals'),
     path('tax-reduce-requests/', CreateTaxReduceRequestAPIView.as_view(), name='create-tax-reduce-request'),
     path('reduce-bases/', ReduceBaseListAPIView.as_view(), name='reduce-base-list'),
+    path('auth/login/', TaxpayerLoginAPIView.as_view(), name='auth-login'),
+    path('auth/login-workers/', WorkerLoginAPIView.as_view(), name='auth-login-workers'),
+    path('auth/token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
 ]
