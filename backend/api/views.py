@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import connection
 from django.utils import timezone
-from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, ReportStatus, TaxOfficer, ReduceType, TaxpayerAuth, WorkerAuth
+from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, ReportStatus, TaxOfficer, ReduceType, TaxpayerAuth, WorkerAuth, ObjectOwnership
 from .serializers import (
     TaxpayerSerializer,
     TaxAccrualSerializer,
@@ -15,7 +15,8 @@ from .serializers import (
     LoginSerializer,
     ProfileSerializer,
     ChangePasswordSerializer,
-    TaxReduceRequestListSerializer
+    TaxReduceRequestListSerializer,
+    ObjectOwnershipSerializer
 )
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -334,3 +335,15 @@ class MyTaxReduceRequestsAPIView(generics.ListAPIView):
         return TaxReduceRequest.objects.filter(
             taxpayer__inn=user_inn
         ).order_by('-send_date')
+    
+class MyTaxableObjectsAPIView(generics.ListAPIView):
+    serializer_class = ObjectOwnershipSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    
+    def get_queryset(self):
+        user = self.request.user
+        user_inn = user.username
+        return ObjectOwnership.objects.filter(
+            taxpayer__inn=user_inn
+        ).select_related('object', 'object__object_type', 'object__real_estate_type')

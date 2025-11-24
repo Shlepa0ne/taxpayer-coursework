@@ -74,3 +74,9 @@ export const getMyRequests = async () => {
     const { data } = await axiosInstance.get('/my-requests/');
     return data;
 }
+
+// Получить налогооблагаемые объекты пользователя
+export const getMyTaxableObjects = async () => {
+    const { data } = await axiosInstance.get('/my-taxable-objects/');
+    return data;
+}

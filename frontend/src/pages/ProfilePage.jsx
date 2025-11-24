@@ -1,11 +1,13 @@
 // frontend/src/pages/ProfilePage.jsx
 import React, { useState, useEffect } from 'react';
-import { getProfile, changePassword } from '../api/taxpayersApi';
+import { getProfile, changePassword, getMyTaxableObjects } from '../api/taxpayersApi';
 import Spinner from '../components/ui/Spinner';
 
 const ProfilePage = () => {
   const [profile, setProfile] = useState(null);
+  const [taxableObjects, setTaxableObjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [objectsLoading, setObjectsLoading] = useState(true);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -18,6 +20,7 @@ const ProfilePage = () => {
 
   useEffect(() => {
     fetchProfile();
+    fetchTaxableObjects();
   }, []);
 
   const fetchProfile = async () => {
@@ -29,6 +32,17 @@ const ProfilePage = () => {
       setError('Ошибка загрузки профиля');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTaxableObjects = async () => {
+    try {
+      const data = await getMyTaxableObjects();
+      setTaxableObjects(data);
+    } catch (err) {
+      console.error('Error fetching taxable objects:', err);
+    } finally {
+      setObjectsLoading(false);
     }
   };
 
@@ -68,6 +82,15 @@ const ProfilePage = () => {
     } catch {
       return 'Не указано';
     }
+  };
+
+  // Функция для форматирования суммы
+  const formatCurrency = (amount) => {
+    if (!amount) return '—';
+    return new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency: 'RUB'
+    }).format(amount);
   };
 
   // Функция для отображения информации в зависимости от типа налогоплательщика
@@ -117,6 +140,33 @@ const ProfilePage = () => {
     return commonFields;
   };
 
+  // Функция для отображения характеристик объекта в зависимости от типа
+  const getObjectCharacteristics = (obj) => {
+    switch (obj.object_type_name) {
+      case 'транспорт':
+        return [
+          { label: 'VIN', value: obj.transport_vin },
+          { label: 'Госномер', value: obj.registration_plate },
+          { label: 'Модель', value: obj.transport_model },
+          { label: 'Мощность двигателя', value: obj.engine_power ? `${obj.engine_power} л.с.` : null },
+          { label: 'Стоимость', value: formatCurrency(obj.extra_value) }
+        ];
+      case 'недвижимость':
+        return [
+          { label: 'Кадастровый номер', value: obj.cadastral_number },
+          { label: 'Тип недвижимости', value: obj.real_estate_type_name },
+          { label: 'Кадастровая стоимость', value: formatCurrency(obj.cadastral_value) }
+        ];
+      case 'земельный участок':
+        return [
+          { label: 'Кадастровый номер', value: obj.cadastral_number },
+          { label: 'Кадастровая стоимость', value: formatCurrency(obj.cadastral_value) }
+        ];
+      default:
+        return [];
+    }
+  };
+
   if (loading) return <Spinner />;
 
   const profileFields = renderProfileInfo();
@@ -150,6 +200,83 @@ const ProfilePage = () => {
             ) : (
               <div className="alert alert-warning">
                 Не удалось загрузить данные профиля
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Налогооблагаемые объекты */}
+        <div className="card border-0 shadow-sm">
+          <div className="card-header bg-info text-white">
+            <h5 className="card-title mb-0">
+              <i className="bi bi-house me-2"></i>
+              Налогооблагаемые объекты
+            </h5>
+          </div>
+          <div className="card-body">
+            {objectsLoading ? (
+              <Spinner />
+            ) : taxableObjects.length > 0 ? (
+              <div className="row">
+                {taxableObjects.map((ownership) => {
+                  const obj = ownership.object;
+                  const characteristics = getObjectCharacteristics(obj);
+                  
+                  return (
+                    <div key={ownership.ownership_id} className="col-12 mb-4">
+                      <div className="card border">
+                        <div className="card-header bg-light">
+                          <h6 className="mb-0">
+                            <i className={`bi ${
+                              obj.object_type_name === 'транспорт' ? 'bi-car-front' :
+                              obj.object_type_name === 'недвижимость' ? 'bi-building' :
+                              'bi-geo-alt'
+                            } me-2`}></i>
+                            {obj.object_name || 'Без названия'}
+                            <span className="badge bg-secondary ms-2">
+                              {obj.object_type_name}
+                            </span>
+                          </h6>
+                        </div>
+                        <div className="card-body">
+                          <div className="row">
+                            <div className="col-md-6">
+                              <h6 className="text-muted small mb-2">Основная информация</h6>
+                              {obj.object_address && (
+                                <div className="mb-2">
+                                  <strong>Адрес:</strong> {obj.object_address}
+                                </div>
+                              )}
+                              <div className="mb-2">
+                                <strong>Период владения:</strong>{' '}
+                                {formatDate(ownership.ownership_start_date)} -{' '}
+                                {ownership.ownership_end_date 
+                                  ? formatDate(ownership.ownership_end_date)
+                                  : 'по настоящее время'
+                                }
+                              </div>
+                            </div>
+                            <div className="col-md-6">
+                              <h6 className="text-muted small mb-2">Характеристики</h6>
+                              {characteristics.map((char, index) => (
+                                char.value && (
+                                  <div key={index} className="mb-1">
+                                    <strong>{char.label}:</strong> {char.value}
+                                  </div>
+                                )
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center text-muted py-4">
+                <i className="bi bi-inbox display-4"></i>
+                <p className="mt-2">Налогооблагаемые объекты отсутствуют</p>
               </div>
             )}
           </div>

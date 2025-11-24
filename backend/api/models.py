@@ -115,3 +115,50 @@ class WorkerAuth(models.Model):
     class Meta:
         managed = False
         db_table = 'worker_auth'
+
+
+# Модели для налогооблагаемых объектов
+class ObjectType(models.Model):
+    object_type_id = models.AutoField(primary_key=True)
+    object_type_name = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'object_type'
+
+class RealEstateType(models.Model):
+    real_estate_type_id = models.AutoField(primary_key=True)
+    real_estate_type_name = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'real_estate_type'
+
+class TaxableObject(models.Model):
+    object_id = models.AutoField(primary_key=True)
+    object_name = models.TextField(blank=True, null=True)
+    cadastral_number = models.CharField(max_length=16, blank=True, null=True)
+    object_address = models.TextField(blank=True, null=True)
+    cadastral_value = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    transport_vin = models.CharField(max_length=17, blank=True, null=True)
+    registration_plate = models.CharField(max_length=9, blank=True, null=True)
+    transport_model = models.TextField(blank=True, null=True)
+    extra_value = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    object_type = models.ForeignKey(ObjectType, on_delete=models.DO_NOTHING)
+    real_estate_type = models.ForeignKey(RealEstateType, on_delete=models.DO_NOTHING, blank=True, null=True)
+    engine_power = models.IntegerField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'taxable_object'
+
+class ObjectOwnership(models.Model):
+    ownership_id = models.AutoField(primary_key=True)
+    ownership_start_date = models.DateField(blank=True, null=True)
+    ownership_end_date = models.DateField(blank=True, null=True)
+    taxpayer = models.ForeignKey(Taxpayer, on_delete=models.DO_NOTHING)
+    object = models.ForeignKey(TaxableObject, on_delete=models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'object_ownership'

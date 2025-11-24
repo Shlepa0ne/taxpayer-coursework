@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase
+from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, TaxableObject, ObjectOwnership
 
 class TaxpayerSerializer(serializers.ModelSerializer):
     class Meta:
@@ -68,3 +68,26 @@ class TaxReduceRequestListSerializer(serializers.ModelSerializer):
             'full_description', 'reduce_base_name', 'request_status_name',
             'reduce_type_name', 'verdict_date'
         ]
+
+class TaxableObjectSerializer(serializers.ModelSerializer):
+    object_type_name = serializers.CharField(source='object_type.object_type_name', read_only=True)
+    real_estate_type_name = serializers.CharField(source='real_estate_type.real_estate_type_name', read_only=True)
+    ownership_start_date = serializers.DateField(read_only=True)
+    ownership_end_date = serializers.DateField(read_only=True)
+
+    class Meta:
+        model = TaxableObject
+        fields = [
+            'object_id', 'object_name', 'cadastral_number', 'object_address',
+            'cadastral_value', 'transport_vin', 'registration_plate',
+            'transport_model', 'extra_value', 'engine_power',
+            'object_type_name', 'real_estate_type_name',
+            'ownership_start_date', 'ownership_end_date'
+        ]
+
+class ObjectOwnershipSerializer(serializers.ModelSerializer):
+    object = TaxableObjectSerializer(read_only=True)
+    
+    class Meta:
+        model = ObjectOwnership
+        fields = ['ownership_id', 'ownership_start_date', 'ownership_end_date', 'object']
