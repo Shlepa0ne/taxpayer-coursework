@@ -33,7 +33,6 @@ class Taxpayer(models.Model):
 # Модель для типов налогов
 class TaxType(models.Model):
     tax_type_id = models.AutoField(primary_key=True)
-    tax_type_code = models.CharField(max_length=20, blank=True, null=True)
     tax_type_name = models.TextField(blank=True, null=True)
 
     class Meta:
@@ -178,3 +177,59 @@ class TaxPayment(models.Model):
     class Meta:
         managed = False
         db_table = 'tax_payment'
+
+class PeriodType(models.Model):
+    type_period_id = models.AutoField(primary_key=True)
+    name = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'period_type'
+
+class TaxPeriod(models.Model):
+    period_id = models.AutoField(primary_key=True)
+    start_date = models.DateField(blank=True, null=True)
+    end_date = models.DateField(blank=True, null=True)
+    period_type = models.ForeignKey(PeriodType, on_delete=models.DO_NOTHING, db_column='period_type_id')
+
+    class Meta:
+        managed = False
+        db_table = 'tax_period'
+
+    @property
+    def period_name(self):
+        """Генерируем имя периода на основе дат и типа"""
+        if self.period_type_id == 1:  # годовой
+            return f"{self.start_date.year} год"
+        elif self.period_type_id == 2:  # квартальный
+            quarter = (self.start_date.month - 1) // 3 + 1
+            return f"{self.start_date.year} Q{quarter}"
+        elif self.period_type_id == 3:  # месячный
+            month_names = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                          'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+            return f"{month_names[self.start_date.month - 1]} {self.start_date.year}"
+        else:
+            return f"{self.start_date} - {self.end_date}"
+
+class Declaration(models.Model):
+    declaration_id = models.AutoField(primary_key=True)
+    submission_date = models.DateTimeField(blank=True, null=True)
+    tax_sum = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    total_income = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    taxpayer = models.ForeignKey(Taxpayer, on_delete=models.DO_NOTHING, related_name='declarations_for_taxpayer')
+    who_declares = models.ForeignKey(Taxpayer, on_delete=models.DO_NOTHING, related_name='declarations_by_taxpayer')
+    period = models.ForeignKey(TaxPeriod, on_delete=models.DO_NOTHING, db_column='period_id')
+    tax_type = models.ForeignKey(TaxType, on_delete=models.DO_NOTHING)
+    declaration_status_id = models.IntegerField()
+
+    class Meta:
+        managed = False
+        db_table = 'tax_declaration'
+    
+class DeclarationStatus(models.Model):
+    declaration_status_id = models.AutoField(primary_key=True)
+    declaration_status_name = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'declaration_status'

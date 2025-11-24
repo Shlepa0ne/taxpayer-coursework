@@ -170,10 +170,10 @@ const DashboardHome = () => {
                 </div>
                 <div className="col-md-3 mb-3">
                   <div className="d-grid">
-                    <button className="btn btn-outline-info" disabled>
+                    <Link to="/declarations" className="btn btn-outline-info">
                       <i className="bi bi-file-earmark-pdf me-2"></i>
                       Декларации
-                    </button>
+                    </Link>
                   </div>
                 </div>
                 <div className="col-md-3 mb-3">

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.db.models import Sum
 from django.utils import timezone
-from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, TaxableObject, ObjectOwnership, TaxPayment, TaxType
+from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, TaxableObject, ObjectOwnership, TaxPayment, TaxType, Declaration, TaxPeriod
 
 class TaxpayerSerializer(serializers.ModelSerializer):
     class Meta:
@@ -169,3 +169,119 @@ class PaymentCreateSerializer(serializers.Serializer):
         choices=[('card', 'Банковская карта'), ('SPB', 'Система быстрых платежей (СБП)')],
         default='card'
     )
+
+class DeclarationSerializer(serializers.ModelSerializer):
+    tax_type_name = serializers.CharField(source='tax_type.tax_type_name', read_only=True)
+    declaration_status_name = serializers.CharField(source='get_declaration_status_display', read_only=True)
+    period_name = serializers.SerializerMethodField()
+    
+    tax_amount = serializers.DecimalField(
+        source='tax_sum', 
+        max_digits=20, 
+        decimal_places=2, 
+        write_only=True,
+        required=True
+    )
+    tax_type_id = serializers.PrimaryKeyRelatedField(
+        queryset=TaxType.objects.all(),
+        source='tax_type',
+        write_only=True,
+        required=True
+    )
+    period_start = serializers.DateField(write_only=True, required=True)
+    period_end = serializers.DateField(write_only=True, required=True)
+    declaration_type = serializers.CharField(write_only=True, required=True)
+    target_inn = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    
+    class Meta:
+        model = Declaration
+        fields = [
+            'declaration_id', 
+            'submission_date', 
+            'tax_type', 
+            'tax_type_name', 
+            'tax_type_id',
+            'tax_amount',
+            'tax_sum',
+            'total_income', 
+            'period',
+            'period_name',
+            'period_start',
+            'period_end',
+            'declaration_status_id',
+            'declaration_status_name',
+            'declaration_type',
+            'target_inn'
+        ]
+        read_only_fields = [
+            'declaration_id', 'submission_date', 'declaration_status_id', 
+            'tax_sum', 'tax_type', 'period'
+        ]
+    
+    def get_period_name(self, obj):
+        if obj.period:
+            return obj.period.period_name
+        return "—"
+    
+class DeclarationListSerializer(serializers.ModelSerializer):
+    tax_type_name = serializers.CharField(source='tax_type.tax_type_name', read_only=True)
+    tax_amount = serializers.DecimalField(source='tax_sum', max_digits=20, decimal_places=2, read_only=True)
+    declaration_type = serializers.SerializerMethodField()
+    target_taxpayer_name = serializers.SerializerMethodField()
+    period_name = serializers.SerializerMethodField()
+    period_start = serializers.DateField(source='period.start_date', read_only=True)
+    period_end = serializers.DateField(source='period.end_date', read_only=True)
+    
+    class Meta:
+        model = Declaration
+        fields = [
+            'declaration_id', 
+            'submission_date', 
+            'tax_type_name', 
+            'tax_amount',
+            'total_income', 
+            'declaration_type',
+            'target_taxpayer_name',
+            'period_name',
+            'period_start', 
+            'period_end',
+            'declaration_status_id'
+        ]
+    
+    def get_declaration_type(self, obj):
+        if obj.who_declares_id == obj.taxpayer_id:
+            return '3-НДФЛ'
+        else:
+            return '6-НДФЛ'
+    
+    def get_target_taxpayer_name(self, obj):
+        if obj.who_declares_id == obj.taxpayer_id:
+            return "За себя"
+        else:
+            taxpayer = obj.taxpayer
+            if taxpayer.fio:
+                return f"{taxpayer.fio} (ИНН: {taxpayer.inn})"
+            elif taxpayer.full_name:
+                return f"{taxpayer.full_name} (ИНН: {taxpayer.inn})"
+            else:
+                return f"Налогоплательщик (ИНН: {taxpayer.inn})"
+    
+    def get_period_name(self, obj):
+        if obj.period:
+            return obj.period.period_name
+        return "—"
+
+class TaxTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaxType
+        fields = ['tax_type_id', 'tax_type_name'] 
+
+class TaxPeriodSerializer(serializers.ModelSerializer):
+    period_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TaxPeriod
+        fields = ['period_id', 'start_date', 'end_date', 'period_type_id', 'period_name']
+    
+    def get_period_name(self, obj):
+        return obj.period_name

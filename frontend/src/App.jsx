@@ -7,23 +7,13 @@ import { useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import LoginWorkersPage from './pages/LoginWorkersPage';
 import DashboardPage from './pages/DashboardPage';
-import DashboardHome from './pages/DashboardHome'; // Новая главная страница
+import DashboardHome from './pages/DashboardHome';
 import MyTaxesPage from './pages/MyTaxesPage';
 import TaxReduceRequestPage from './pages/TaxReduceRequestPage';
+import DeclarationsPage from './pages/DeclarationsPage'; // Новая страница
 import Spinner from './components/ui/Spinner';
 import WorkersDashboardPlaceholder from './pages/WorkersDashboardPlaceholder';
 import ProfilePage from './pages/ProfilePage';
-
-// Заглушки для новых страниц
-const DeclarationsPage = () => (
-  <div className="card">
-    <div className="card-body text-center py-5">
-      <i className="bi bi-file-earmark-pdf display-1 text-muted mb-3"></i>
-      <h3>Декларации</h3>
-      <p className="text-muted">Раздел в разработке</p>
-    </div>
-  </div>
-);
 
 // Компонент-обертка для защиты роутов
 function ProtectedRoute({ children }) {
@@ -69,10 +59,10 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<DashboardHome />} /> {/* Новая главная страница */}
+        <Route index element={<DashboardHome />} />
         <Route path="accruals" element={<MyTaxesPage />} />
         <Route path="new-request" element={<TaxReduceRequestPage />} />
-        <Route path="declarations" element={<DeclarationsPage />} />
+        <Route path="declarations" element={<DeclarationsPage />} /> {/* Обновленный маршрут */}
         <Route path="profile" element={<ProfilePage />} />
         <Route path="requests" element={<TaxReduceRequestPage />} />
       </Route>

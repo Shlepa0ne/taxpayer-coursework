@@ -1,3 +1,4 @@
+// frontend/src/api/taxpayersApi.js
 import axiosInstance from './axiosInstance';
 
 // Функция для получения списка всех налогоплательщиков (для админ-панели).
@@ -46,7 +47,6 @@ export const getLatestRiskScore = async () => {
     return data;
 }
 
-
 export const getProfile = async () => {
     try {
         const { data } = await axiosInstance.get('/profile/');
@@ -92,3 +92,34 @@ export const createTaxPayment = async (paymentData) => {
     const { data } = await axiosInstance.post('/create-tax-payment/', paymentData);
     return data;
 }
+
+// Получить список всех деклараций пользователя
+export const getMyDeclarations = async () => {
+  const { data } = await axiosInstance.get('/my-declarations/');
+  return data;
+};
+
+// Создать новую декларацию
+export const createDeclaration = async (declarationData) => {
+  const { data } = await axiosInstance.post('/declarations/', {
+    declaration_type: declarationData.declaration_type,
+    target_inn: declarationData.target_inn || '',
+    tax_type_id: declarationData.tax_type_id,
+    tax_amount: declarationData.tax_amount,
+    total_income: declarationData.total_income,
+    period_start: declarationData.period_start,
+    period_end: declarationData.period_end
+  });
+  return data;
+};
+
+// Получить типы налогов для деклараций
+export const getTaxTypes = async () => {
+  const { data } = await axiosInstance.get('/tax-types/');
+  return data;
+};
+
+export const getPeriods = async () => {
+  const { data } = await axiosInstance.get('/periods/');
+  return data;
+};

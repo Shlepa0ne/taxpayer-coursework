@@ -7,7 +7,7 @@ from django.utils import timezone
 from .models import (
     Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, ReportStatus, 
     TaxOfficer, ReduceType, TaxpayerAuth, WorkerAuth, ObjectOwnership, 
-    TaxPayment  # Убрали AccrualStatus из импорта
+    TaxPayment, TaxType, Declaration, TaxPeriod
 )
 from .serializers import (
     TaxpayerSerializer,
@@ -23,7 +23,11 @@ from .serializers import (
     ObjectOwnershipSerializer,
     TaxAccrualWithPaymentSerializer, 
     TaxPaymentSerializer, 
-    PaymentCreateSerializer
+    PaymentCreateSerializer,
+    DeclarationSerializer,
+    TaxTypeSerializer,
+    DeclarationListSerializer,
+    TaxPeriodSerializer
 )
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -474,3 +478,168 @@ class MyTaxAccrualsWithPaymentsAPIView(generics.ListAPIView):
         user = self.request.user
         user_inn = user.username
         return TaxAccrual.objects.filter(taxpayer__inn=user_inn).select_related('object', 'object__object_type')
+    
+class MyDeclarationsAPIView(generics.ListAPIView):
+    serializer_class = DeclarationListSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    
+    def get_queryset(self):
+        try:
+            user = self.request.user
+            user_inn = user.username
+            taxpayer = Taxpayer.objects.get(inn=user_inn)
+            
+            return Declaration.objects.filter(
+                who_declares=taxpayer
+            ).select_related('tax_type', 'taxpayer', 'period').order_by('-submission_date')
+            
+        except Taxpayer.DoesNotExist:
+            return Declaration.objects.none()
+        except Exception as e:
+            return Declaration.objects.none()
+        
+class CreateDeclarationAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        serializer = DeclarationSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = self.request.user
+            current_taxpayer = Taxpayer.objects.get(inn=user.username)
+            
+            declaration_type = serializer.validated_data.get('declaration_type')
+            target_inn = serializer.validated_data.get('target_inn', '')
+            tax_type = serializer.validated_data.get('tax_type')
+            tax_sum = serializer.validated_data.get('tax_sum')
+            total_income = serializer.validated_data.get('total_income')
+            period_start = serializer.validated_data.get('period_start')
+            period_end = serializer.validated_data.get('period_end')
+            
+            # Определяем taxpayer_id в зависимости от типа декларации
+            if declaration_type == '3-NDFL':
+                taxpayer = current_taxpayer
+                who_declares = current_taxpayer
+            elif declaration_type == '6-NDFL':
+                if not target_inn:
+                    return Response(
+                        {'error': 'Для 6-НДФЛ необходимо указать ИНН налогоплательщика'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                try:
+                    taxpayer = Taxpayer.objects.get(inn=target_inn)
+                except Taxpayer.DoesNotExist:
+                    return Response(
+                        {'error': 'Налогоплательщик с указанным ИНН не найден'}, 
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                who_declares = current_taxpayer
+            else:
+                return Response(
+                    {'error': 'Неверный тип декларации'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Находим или создаем период
+            period = self.get_or_create_period(period_start, period_end)
+            
+            # Создаем декларацию
+            declaration = Declaration.objects.create(
+                taxpayer=taxpayer,
+                who_declares=who_declares,
+                tax_type=tax_type,
+                tax_sum=tax_sum,
+                total_income=total_income,
+                submission_date=timezone.now(),
+                period=period,
+                declaration_status_id=2  # Статус "Подана"
+            )
+            
+            response_serializer = DeclarationSerializer(declaration)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Taxpayer.DoesNotExist:
+            return Response(
+                {'error': 'Текущий налогоплательщик не найден'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при создании декларации: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def get_or_create_period(self, start_date, end_date):
+        """Находит или создает период в таблице tax_period"""
+        try:
+            # Пытаемся найти существующий период
+            period = TaxPeriod.objects.filter(
+                start_date=start_date,
+                end_date=end_date
+            ).first()
+            
+            if period:
+                return period
+            
+            # Определяем тип периода
+            period_type_id = self.determine_period_type(start_date, end_date)
+            
+            # Создаем новый период
+            period = TaxPeriod.objects.create(
+                start_date=start_date,
+                end_date=end_date,
+                period_type_id=period_type_id
+            )
+            
+            return period
+            
+        except Exception as e:
+            # В случае ошибки создаем период с квартальным типом по умолчанию
+            period = TaxPeriod.objects.create(
+                start_date=start_date,
+                end_date=end_date,
+                period_type_id=2  # квартальный по умолчанию
+            )
+            return period
+    
+    def determine_period_type(self, start_date, end_date):
+        """Определяет тип периода на основе дат"""
+        from datetime import timedelta
+        
+        # Проверяем годовой период (с 1 января по 31 декабря)
+        if (start_date.month == 1 and start_date.day == 1 and 
+            end_date.month == 12 and end_date.day == 31):
+            return 1  # годовой
+        
+        # Проверяем квартальные периоды
+        quarters = [
+            (1, 1, 31, 3),   # Q1: 1 янв - 31 мар
+            (1, 4, 30, 6),   # Q2: 1 апр - 30 июн
+            (1, 7, 30, 9),   # Q3: 1 июл - 30 сен
+            (1, 10, 31, 12)  # Q4: 1 окт - 31 дек
+        ]
+        
+        for quarter_start_day, quarter_start_month, quarter_end_day, quarter_end_month in quarters:
+            if (start_date.month == quarter_start_month and start_date.day == quarter_start_day and
+                end_date.month == quarter_end_month and end_date.day == quarter_end_day):
+                return 2  # квартальный
+        
+        # Проверяем месячный период (разница в днях примерно 27-31 день)
+        days_diff = (end_date - start_date).days
+        if 27 <= days_diff <= 31:
+            return 3  # месячный
+        
+        # По умолчанию считаем квартальным
+        return 2
+        
+class TaxTypeListAPIView(generics.ListAPIView):
+    queryset = TaxType.objects.all()
+    serializer_class = TaxTypeSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]

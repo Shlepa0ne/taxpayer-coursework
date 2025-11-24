@@ -2816,7 +2816,8 @@ CREATE TABLE public.tax_declaration (
     taxpayer_id integer NOT NULL,
     period_id integer NOT NULL,
     tax_type_id integer NOT NULL,
-    declaration_status_id integer NOT NULL
+    declaration_status_id integer NOT NULL,
+    who_declares_id integer
 )
 WITH (autovacuum_enabled='true');
 
