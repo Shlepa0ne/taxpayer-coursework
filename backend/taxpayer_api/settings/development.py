@@ -17,3 +17,5 @@ CORS_ALLOWED_ORIGINS = [
 
 # В разработке удобно выводить письма в консоль
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+CORS_ALLOW_CREDENTIALS = True

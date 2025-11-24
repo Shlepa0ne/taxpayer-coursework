@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [accessToken, setAccessToken] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [isLoading, setIsLoading] = useState(true); // Добавляем состояние загрузки
 
   // Функция для проверки аутентификации
   const checkAuth = () => {
@@ -29,7 +30,11 @@ export function AuthProvider({ children }) {
             setIsAuthenticated(true);
             setAccessToken(tokens.access);
             setUserRole(tokens.role);
+            setIsLoading(false);
             return true;
+          } else {
+            // Токен истек - выходим
+            logout();
           }
         }
       } catch (error) {
@@ -40,6 +45,7 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
     setAccessToken(null);
     setUserRole(null);
+    setIsLoading(false);
     return false;
   };
 
@@ -63,6 +69,7 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(true);
     setAccessToken(tokens.access);
     setUserRole(tokens.role);
+    setIsLoading(false);
   };
 
   const logout = async () => {
@@ -76,15 +83,17 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
     setAccessToken(null);
     setUserRole(null);
+    setIsLoading(false);
   };
 
   const value = {
     isAuthenticated,
     accessToken,
     userRole,
+    isLoading, // Экспортируем состояние загрузки
     login,
     logout,
-    checkAuth // экспортируем для ручной проверки
+    checkAuth
   };
 
   return (

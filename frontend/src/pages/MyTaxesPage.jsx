@@ -1,44 +1,55 @@
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
 import { getMyAccruals } from '../api/taxpayersApi';
 import Spinner from '../components/ui/Spinner';
 
 const MyTaxesPage = () => {
-  // Хук useQuery от TanStack Query для управления серверным состоянием.
-  const { data: accruals, isLoading, isError, error } = useQuery({
-    // 'myAccruals' - уникальный ключ для кэширования этого запроса.
-    queryKey: ['myAccruals'],
-    // Функция, которая будет вызвана для получения данных.
-    queryFn: getMyAccruals,
-  });
+  const [accruals, setAccruals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Пока данные загружаются, показываем спиннер.
-  if (isLoading) {
-    return <Spinner />;
-  }
+  useEffect(() => {
+    const fetchAccruals = async () => {
+      try {
+        setLoading(true);
+        const data = await getMyAccruals();
+        setAccruals(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Если произошла ошибка при загрузке, отображаем сообщение.
-  if (isError) {
-    return <div style={{ color: 'red', padding: '20px' }}>Ошибка загрузки данных: {error.message}</div>;
-  }
+    fetchAccruals();
+  }, []);
 
-  // Если загрузка прошла успешно, отображаем данные.
+  if (loading) return <Spinner />;
+  if (error) return <div className="alert alert-danger">Ошибка: {error}</div>;
+
   return (
-    <div style={{ padding: '20px' }}>
-      <h2>Мои начисления</h2>
+    <div>
+      <h2>Мои налоговые начисления</h2>
       {accruals.length === 0 ? (
-        <p>На данный момент у вас нет активных начислений.</p>
+        <p>Нет данных о начислениях</p>
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {/* Проходим по массиву начислений и рендерим элемент списка для каждого */}
-          {accruals.map((accrual) => (
-            <li key={accrual.tax_accrual_id} style={{ border: '1px solid #ccc', padding: '10px', marginBottom: '10px' }}>
-              <div><strong>Сумма к уплате:</strong> {accrual.accrual_amount} руб.</div>
-              <div><strong>Срок уплаты:</strong> {new Date(accrual.due_date).toLocaleDateString()}</div>
-              <div><strong>Дата начисления:</strong> {new Date(accrual.accrual_date).toLocaleString()}</div>
-            </li>
-          ))}
-        </ul>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Дата начисления</th>
+              <th>Сумма</th>
+              <th>Срок оплаты</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accruals.map(accrual => (
+              <tr key={accrual.tax_accrual_id}>
+                <td>{new Date(accrual.accrual_date).toLocaleDateString()}</td>
+                <td>{accrual.accrual_amount} руб.</td>
+                <td>{new Date(accrual.due_date).toLocaleDateString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );

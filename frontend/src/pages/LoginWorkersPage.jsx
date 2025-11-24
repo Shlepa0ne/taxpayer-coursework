@@ -71,7 +71,7 @@ const LoginWorkersPage = () => {
               className="btn btn-outline-secondary"
               onClick={() => navigate('/login')}
             >
-              Назад
+              Вход на налогоплательщиков
             </button>
           </div>
         </div>

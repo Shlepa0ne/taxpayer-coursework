@@ -19,6 +19,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
+from .authentication import InnAuthentication
 
 
 class TaxpayerListAPIView(generics.ListAPIView):
@@ -54,20 +55,24 @@ class CalculateRiskScoreAPIView(APIView):
 class MyTaxAccrualsAPIView(generics.ListAPIView):
     serializer_class = TaxAccrualSerializer
     permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]  # Добавьте эту строку
+    
     def get_queryset(self):
         user = self.request.user
         user_inn = user.username
         return TaxAccrual.objects.filter(taxpayer__inn=user_inn)
 
+# Добавьте authentication_classes ко всем защищенным View
 class ReduceBaseListAPIView(generics.ListAPIView):
     queryset = ReduceBase.objects.all()
     serializer_class = ReduceBaseSerializer
     permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]  # Добавьте
 
-# View для создания нового заявления.
 class CreateTaxReduceRequestAPIView(generics.CreateAPIView):
     serializer_class = TaxReduceRequestSerializer
     permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]  # Убедитесь, что он есть
 
     def perform_create(self, serializer):
         user = self.request.user
