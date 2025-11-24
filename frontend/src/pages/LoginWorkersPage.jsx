@@ -1,10 +1,10 @@
-// frontend/src/pages/LoginPage.jsx
+// frontend/src/pages/LoginWorkersPage.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loginTaxpayer } from '../api/authApi';
-import { useAuth } from '../context/AuthContext';
+import { loginWorker } from '../api/authApi';
+import { useAuth } from '../context/AuthContext'; // Добавляем импорт
 
-const LoginPage = () => {
+const LoginWorkersPage = () => {
   const [inn, setInn] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -15,17 +15,17 @@ const LoginPage = () => {
     e.preventDefault();
     setError(null);
     try {
-      const data = await loginTaxpayer({ inn, password });
+      const data = await loginWorker({ inn, password });
       
       // Вызываем login в контексте для немедленного обновления состояния
       login({
         access: data.access,
         refresh: data.refresh,
-        role: 'taxpayer' // Добавляем роль, так как в ответе от taxpayer login может не быть role
+        role: data.role
       });
       
-      // После успешного входа — перенаправляем на главную страницу
-      navigate('/');
+      // После успешного входа — перенаправим на страницу сотрудников
+      navigate('/worker');
     } catch (err) {
       setError(err?.response?.data?.detail || 'Ошибка входа');
     }
@@ -35,11 +35,11 @@ const LoginPage = () => {
     <div className="container d-flex align-items-center justify-content-center" style={{ minHeight: '80vh' }}>
       <div className="card shadow-sm" style={{ width: '420px' }}>
         <div className="card-body p-4">
-          <h3 className="card-title mb-3 text-center">Вход — налогоплательщик</h3>
+          <h3 className="card-title mb-3 text-center">Вход — сотрудник</h3>
           <form onSubmit={handleSubmit}>
             {error && <div className="alert alert-danger">{error}</div>}
             <div className="mb-3">
-              <label className="form-label">ИНН</label>
+              <label className="form-label">ИНН сотрудника</label>
               <input
                 type="text"
                 value={inn}
@@ -69,9 +69,9 @@ const LoginPage = () => {
           <div className="text-center">
             <button
               className="btn btn-outline-secondary"
-              onClick={() => navigate('/login-workers')}
+              onClick={() => navigate('/login')}
             >
-              Вход для сотрудников
+              Назад
             </button>
           </div>
         </div>
@@ -80,4 +80,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default LoginWorkersPage;

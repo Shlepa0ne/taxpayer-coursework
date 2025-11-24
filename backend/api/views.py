@@ -126,10 +126,10 @@ class TaxpayerLoginAPIView(APIView):
         try:
             cred = TaxpayerAuth.objects.get(pk=inn)
         except TaxpayerAuth.DoesNotExist:
-            return Response({'detail': 'Неверный INN или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'detail': 'Такой пользователь не найден'}, status=status.HTTP_401_UNAUTHORIZED)
 
         if not check_password(password, cred.password_hash):
-            return Response({'detail': 'Неверный INN или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'detail': 'Неверный ИНН или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
 
         tokens = _make_tokens_for_inn(inn, 'taxpayer')
         return Response({
@@ -152,10 +152,10 @@ class WorkerLoginAPIView(APIView):
         try:
             cred = WorkerAuth.objects.get(pk=inn)
         except WorkerAuth.DoesNotExist:
-            return Response({'detail': 'Неверный INN или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'detail': 'Такой сотрудник не найден'}, status=status.HTTP_401_UNAUTHORIZED)
 
         if not check_password(password, cred.password_hash):
-            return Response({'detail': 'Неверный INN или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'detail': 'Неверный ИНН или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
 
         tokens = _make_tokens_for_inn(inn, 'worker')
         return Response({
