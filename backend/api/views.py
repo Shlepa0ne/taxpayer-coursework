@@ -1,10 +1,14 @@
-from rest_framework import generics, status, serializers, permissions, serializers
+from rest_framework import generics, status, serializers, permissions
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.db import connection
+from django.db import connection, transaction
 from django.utils import timezone
-from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, ReportStatus, TaxOfficer, ReduceType, TaxpayerAuth, WorkerAuth, ObjectOwnership
+from .models import (
+    Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, ReportStatus, 
+    TaxOfficer, ReduceType, TaxpayerAuth, WorkerAuth, ObjectOwnership, 
+    TaxPayment  # Убрали AccrualStatus из импорта
+)
 from .serializers import (
     TaxpayerSerializer,
     TaxAccrualSerializer,
@@ -16,15 +20,17 @@ from .serializers import (
     ProfileSerializer,
     ChangePasswordSerializer,
     TaxReduceRequestListSerializer,
-    ObjectOwnershipSerializer
+    ObjectOwnershipSerializer,
+    TaxAccrualWithPaymentSerializer, 
+    TaxPaymentSerializer, 
+    PaymentCreateSerializer
 )
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.response import Response
 from .authentication import InnAuthentication
 from django.contrib.auth.hashers import check_password, make_password
+from django.db.models import Sum
 
 
 class TaxpayerListAPIView(generics.ListAPIView):
@@ -347,3 +353,124 @@ class MyTaxableObjectsAPIView(generics.ListAPIView):
         return ObjectOwnership.objects.filter(
             taxpayer__inn=user_inn
         ).select_related('object', 'object__object_type', 'object__real_estate_type')
+    
+class MyTaxAccrualsWithPaymentsAPIView(generics.ListAPIView):
+    serializer_class = TaxAccrualWithPaymentSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    
+    def get_queryset(self):
+        user = self.request.user
+        user_inn = user.username
+        return TaxAccrual.objects.filter(taxpayer__inn=user_inn)
+
+class CreateTaxPaymentAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        serializer = PaymentCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            with transaction.atomic():
+                user_inn = request.user.username
+                tax_accrual_id = serializer.validated_data['tax_accrual_id']
+                payment_amount = serializer.validated_data['payment_amount']
+                
+                # Проверяем, что начисление принадлежит пользователю
+                accrual = TaxAccrual.objects.get(
+                    tax_accrual_id=tax_accrual_id,
+                    taxpayer__inn=user_inn
+                )
+                
+                # Получаем уже оплаченную сумму
+                paid_amount = TaxPayment.objects.filter(
+                    tax_income_id=tax_accrual_id
+                ).aggregate(total=Sum('payment_amount'))['total'] or 0
+                
+                remaining_amount = accrual.accrual_amount - paid_amount
+                
+                # Проверяем, что сумма оплаты не превышает оставшуюся
+                if payment_amount > remaining_amount:
+                    return Response(
+                        {'error': f'Сумма оплаты не может превышать {remaining_amount} руб.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                if payment_amount <= 0:
+                    return Response(
+                        {'error': 'Сумма оплаты должна быть положительной'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Создаем платеж
+                payment = TaxPayment.objects.create(
+                    payment_date=timezone.now(),
+                    payment_amount=payment_amount,
+                    tax_income=accrual,
+                    kbk_id=1,  # Значение по умолчанию
+                    debit_account='',
+                    credit_account=''
+                )
+                
+                # Обновляем статус начисления после платежа
+                self._update_accrual_status(accrual)
+                
+                return Response({
+                    'message': 'Платеж успешно создан',
+                    'payment_id': payment.payment_id,
+                    'payment_amount': payment.payment_amount
+                }, status=status.HTTP_201_CREATED)
+                
+        except TaxAccrual.DoesNotExist:
+            return Response(
+                {'error': 'Начисление не найдено или не принадлежит пользователю'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при создании платежа: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _update_accrual_status(self, accrual):
+        """Обновляет статус начисления на основе оплаченной суммы"""
+        try:
+            # Получаем текущую сумму всех платежей по этому начислению
+            total_paid = TaxPayment.objects.filter(
+                tax_income=accrual
+            ).aggregate(total=Sum('payment_amount'))['total'] or 0
+            
+            # Определяем новый статус
+            if total_paid >= accrual.accrual_amount:
+                # Полностью оплачено
+                new_status_id = 3
+            elif total_paid > 0:
+                # Частично оплачено
+                new_status_id = 2
+            else:
+                # Не оплачено, проверяем просрочку
+                if accrual.due_date and timezone.now().date() > accrual.due_date:
+                    new_status_id = 4  # Просрочено
+                else:
+                    new_status_id = 1  # Начислено
+            
+            # Обновляем статус начисления
+            accrual.accrual_status_id = new_status_id
+            accrual.save()
+            
+        except Exception as e:
+            # Логируем ошибку, но не прерываем выполнение
+            print(f"Ошибка при обновлении статуса начисления: {str(e)}")
+
+class MyTaxAccrualsWithPaymentsAPIView(generics.ListAPIView):
+    serializer_class = TaxAccrualWithPaymentSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    
+    def get_queryset(self):
+        user = self.request.user
+        user_inn = user.username
+        return TaxAccrual.objects.filter(taxpayer__inn=user_inn).select_related('object', 'object__object_type')

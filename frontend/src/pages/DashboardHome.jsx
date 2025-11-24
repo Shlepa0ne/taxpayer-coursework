@@ -1,7 +1,7 @@
 // frontend/src/pages/DashboardHome.jsx
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom'; // Добавьте этот импорт
-import { getMyAccruals } from '../api/taxpayersApi';
+import { Link } from 'react-router-dom';
+import { getMyAccrualsWithPayments } from '../api/taxpayersApi'; // ИМПОРТИРУЕМ ПРАВИЛЬНУЮ ФУНКЦИЮ
 import { getLatestRiskScore } from '../api/taxpayersApi';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
@@ -19,14 +19,16 @@ const DashboardHome = () => {
       try {
         setLoading(true);
         
-        // Получаем начисления для расчета общей суммы
-        const accruals = await getMyAccruals();
-        const total = accruals.reduce((sum, accrual) => {
-          return sum + parseFloat(accrual.accrual_amount || 0);
+        // Получаем начисления с информацией об оплате для расчета реальной задолженности
+        const accrualsWithPayments = await getMyAccrualsWithPayments(); // ИСПОЛЬЗУЕМ ПРАВИЛЬНУЮ ФУНКЦИЮ
+        
+        // Суммируем остатки к оплате (remaining_amount), а не общие начисления
+        const totalRemaining = accrualsWithPayments.reduce((sum, accrual) => {
+          return sum + parseFloat(accrual.remaining_amount || 0);
         }, 0);
         
-        setTotalDebt(total);
-        setAccrualsCount(accruals.length);
+        setTotalDebt(totalRemaining);
+        setAccrualsCount(accrualsWithPayments.length);
 
         // Получаем последний RiskScore
         try {
@@ -36,7 +38,6 @@ const DashboardHome = () => {
           }
         } catch (riskError) {
           console.warn('RiskScore not available:', riskError);
-          // Не устанавливаем ошибку, так как RiskScore может быть недоступен
         }
 
       } catch (err) {
@@ -48,7 +49,7 @@ const DashboardHome = () => {
     };
 
     fetchDashboardData();
-  }, []);
+  }, []); // Добавьте зависимости если нужно перезагружать данные
 
   const getRiskScoreColor = (score) => {
     if (score <= 30) return 'success';
@@ -126,6 +127,14 @@ const DashboardHome = () => {
                   <small>
                     <i className="bi bi-exclamation-triangle me-1"></i>
                     ФНС России рекомендует погасить задолженность в ближайшее время
+                  </small>
+                </div>
+              )}
+              {totalDebt === 0 && accrualsCount > 0 && (
+                <div className="alert alert-success mt-3 mb-0">
+                  <small>
+                    <i className="bi bi-check-circle me-1"></i>
+                    Все начисления оплачены!
                   </small>
                 </div>
               )}

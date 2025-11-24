@@ -80,3 +80,15 @@ export const getMyTaxableObjects = async () => {
     const { data } = await axiosInstance.get('/my-taxable-objects/');
     return data;
 }
+
+// Получить начисления с информацией об оплате
+export const getMyAccrualsWithPayments = async () => {
+    const { data } = await axiosInstance.get('/my-accruals-with-payments/');
+    return data;
+}
+
+// Создать платеж
+export const createTaxPayment = async (paymentData) => {
+    const { data } = await axiosInstance.post('/create-tax-payment/', paymentData);
+    return data;
+}

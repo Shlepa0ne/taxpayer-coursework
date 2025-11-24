@@ -1,7 +1,6 @@
 from django.db import models
 
 # Модель, описывающая налогоплательщика.
-# models.py
 class Taxpayer(models.Model):
     taxpayer_id = models.AutoField(primary_key=True)
     inn = models.CharField(max_length=12, unique=True)
@@ -24,26 +23,40 @@ class Taxpayer(models.Model):
     region_key = models.IntegerField()
     opf_id = models.IntegerField()
     tax_regime_id = models.IntegerField()
-    payer_type_id = models.IntegerField()  # Добавьте это поле
+    payer_type_id = models.IntegerField()
     origin_id = models.IntegerField()
 
     class Meta:
         managed = False
         db_table = 'taxpayer'
 
-# Модель для налоговых начислений.
+# Модель для типов налогов
+class TaxType(models.Model):
+    tax_type_id = models.AutoField(primary_key=True)
+    tax_type_code = models.CharField(max_length=20, blank=True, null=True)
+    tax_type_name = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tax_type'
+
+# Модель для налоговых начислений
 class TaxAccrual(models.Model):
     tax_accrual_id = models.AutoField(primary_key=True)
     taxpayer = models.ForeignKey(Taxpayer, on_delete=models.DO_NOTHING)
     accrual_date = models.DateTimeField(blank=True, null=True)
     accrual_amount = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
     due_date = models.DateField(blank=True, null=True)
+    income_status_id = models.IntegerField()
+    object = models.ForeignKey('TaxableObject', on_delete=models.DO_NOTHING, blank=True, null=True, db_column='object_id')
+    tax_type_id = models.IntegerField()
+    declaration_id = models.IntegerField(blank=True, null=True)
 
     class Meta:
         managed = False
         db_table = 'tax_accrual'
 
-# Справочник оснований для снижения налога.
+
 class ReduceBase(models.Model):
     reduce_base_id = models.AutoField(primary_key=True)
     reduce_base_name = models.TextField(blank=True, null=True)
@@ -52,7 +65,6 @@ class ReduceBase(models.Model):
         managed = False
         db_table = 'reduce_base'
 
-# Справочник статусов для заявлений.
 class ReportStatus(models.Model):
     report_status_id = models.AutoField(primary_key=True)
     report_status_name = models.TextField(blank=True, null=True)
@@ -61,7 +73,6 @@ class ReportStatus(models.Model):
         managed = False
         db_table = 'report_status'
 
-# Модель, описывающая сотрудника налоговой службы.
 class TaxOfficer(models.Model):
     tax_officer_id = models.AutoField(primary_key=True)
     tax_officer_name = models.TextField(blank=True, null=True)
@@ -70,7 +81,6 @@ class TaxOfficer(models.Model):
         managed = False
         db_table = 'tax_officer'
 
-# Справочник типов снижения налога.
 class ReduceType(models.Model):
     reduce_type_id = models.AutoField(primary_key=True)
     reduce_type_name = models.TextField(blank=True, null=True)
@@ -79,7 +89,6 @@ class ReduceType(models.Model):
         managed = False
         db_table = 'reduce_type'
 
-# Модель для заявлений на снижение налога.
 class TaxReduceRequest(models.Model):
     request_id = models.AutoField(primary_key=True)
     taxpayer = models.ForeignKey(Taxpayer, on_delete=models.DO_NOTHING)
@@ -89,24 +98,20 @@ class TaxReduceRequest(models.Model):
     reduce_base = models.ForeignKey(ReduceBase, on_delete=models.DO_NOTHING)
     verdict_date = models.DateTimeField(blank=True, null=True)
     request_status = models.ForeignKey(ReportStatus, on_delete=models.DO_NOTHING)
-    # Указываем реальное имя колонки в унаследованной БД.
     tax_officer = models.ForeignKey(TaxOfficer, on_delete=models.DO_NOTHING, db_column='"Ключ сотрудника"')
-    # Указываем реальное имя колонки для типа снижения.
     reduce_type = models.ForeignKey(ReduceType, on_delete=models.DO_NOTHING, db_column='"Ключ типа снижения"')
     
     class Meta:
         managed = False
         db_table = 'tax_reduce_request'
 
-
 class TaxpayerAuth(models.Model):
-    inn = models.CharField(max_length=32, primary_key=True)  # INN как уникальный идентификатор
-    password_hash = models.CharField(max_length=512)        # хеш пароля
+    inn = models.CharField(max_length=32, primary_key=True)
+    password_hash = models.CharField(max_length=512)
 
     class Meta:
         managed = False
-        db_table = 'taxpayer_auth'  # имя таблицы в БД
-
+        db_table = 'taxpayer_auth'
 
 class WorkerAuth(models.Model):
     inn = models.CharField(max_length=32, primary_key=True)
@@ -116,8 +121,6 @@ class WorkerAuth(models.Model):
         managed = False
         db_table = 'worker_auth'
 
-
-# Модели для налогооблагаемых объектов
 class ObjectType(models.Model):
     object_type_id = models.AutoField(primary_key=True)
     object_type_name = models.TextField(blank=True, null=True)
@@ -162,3 +165,16 @@ class ObjectOwnership(models.Model):
     class Meta:
         managed = False
         db_table = 'object_ownership'
+
+class TaxPayment(models.Model):
+    payment_id = models.AutoField(primary_key=True)
+    payment_date = models.DateTimeField(blank=True, null=True)
+    payment_amount = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    debit_account = models.CharField(max_length=20, blank=True, null=True)
+    credit_account = models.CharField(max_length=20, blank=True, null=True)
+    kbk_id = models.IntegerField()
+    tax_income = models.ForeignKey(TaxAccrual, on_delete=models.DO_NOTHING, db_column='tax_income_id')
+
+    class Meta:
+        managed = False
+        db_table = 'tax_payment'
