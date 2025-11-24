@@ -54,3 +54,17 @@ class ChangePasswordSerializer(serializers.Serializer):
         if attrs['new_password'] != attrs['confirm_password']:
             raise serializers.ValidationError("Новые пароли не совпадают")
         return attrs
+    
+class TaxReduceRequestListSerializer(serializers.ModelSerializer):
+    reduce_base_name = serializers.CharField(source='reduce_base.reduce_base_name', read_only=True)
+    request_status_name = serializers.CharField(source='request_status.report_status_name', read_only=True)
+    reduce_type_name = serializers.CharField(source='reduce_type.reduce_type_name', read_only=True)
+    verdict_date = serializers.DateTimeField(read_only=True)  # Добавляем явно
+    
+    class Meta:
+        model = TaxReduceRequest
+        fields = [
+            'request_id', 'send_date', 'requested_reduce_amount', 
+            'full_description', 'reduce_base_name', 'request_status_name',
+            'reduce_type_name', 'verdict_date'
+        ]

@@ -72,9 +72,9 @@ function App() {
         <Route index element={<DashboardHome />} /> {/* Новая главная страница */}
         <Route path="accruals" element={<MyTaxesPage />} />
         <Route path="new-request" element={<TaxReduceRequestPage />} />
-        <Route path="requests" element={<TaxReduceRequestPage />} /> {/* Можно объединить или разделить */}
         <Route path="declarations" element={<DeclarationsPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="requests" element={<TaxReduceRequestPage />} />
       </Route>
     </Routes>
   );

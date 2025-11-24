@@ -12,7 +12,8 @@ from .views import (
     CurrentTaxpayerAPIView,
     LatestRiskScoreAPIView,
     ProfileDetailAPIView, 
-    ChangePasswordAPIView
+    ChangePasswordAPIView,
+    MyTaxReduceRequestsAPIView
 )
 
 urlpatterns = [
@@ -32,4 +33,5 @@ urlpatterns = [
     path('latest-risk-score/', LatestRiskScoreAPIView.as_view(), name='latest-risk-score'),
     path('profile/', ProfileDetailAPIView.as_view(), name='profile-detail'),
     path('change-password/', ChangePasswordAPIView.as_view(), name='change-password'),
+    path('my-requests/', MyTaxReduceRequestsAPIView.as_view(), name='my-requests'),
 ]

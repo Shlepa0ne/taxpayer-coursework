@@ -14,7 +14,8 @@ from .serializers import (
     ReduceBaseSerializer,
     LoginSerializer,
     ProfileSerializer,
-    ChangePasswordSerializer
+    ChangePasswordSerializer,
+    TaxReduceRequestListSerializer
 )
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -321,3 +322,15 @@ class ChangePasswordAPIView(APIView):
             
         except (TaxpayerAuth.DoesNotExist, WorkerAuth.DoesNotExist):
             return Response({'error': 'Пользователь не найден'}, status=404)
+        
+class MyTaxReduceRequestsAPIView(generics.ListAPIView):
+    serializer_class = TaxReduceRequestListSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    
+    def get_queryset(self):
+        user = self.request.user
+        user_inn = user.username
+        return TaxReduceRequest.objects.filter(
+            taxpayer__inn=user_inn
+        ).order_by('-send_date')

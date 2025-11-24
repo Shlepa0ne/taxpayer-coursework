@@ -68,3 +68,9 @@ export const changePassword = async (passwordData) => {
         throw new Error('Ошибка сети');
     }
 }
+
+// Получить список заявлений пользователя
+export const getMyRequests = async () => {
+    const { data } = await axiosInstance.get('/my-requests/');
+    return data;
+}

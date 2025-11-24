@@ -87,6 +87,7 @@ class TaxReduceRequest(models.Model):
     requested_reduce_amount = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
     full_description = models.TextField(blank=True, null=True)
     reduce_base = models.ForeignKey(ReduceBase, on_delete=models.DO_NOTHING)
+    verdict_date = models.DateTimeField(blank=True, null=True)
     request_status = models.ForeignKey(ReportStatus, on_delete=models.DO_NOTHING)
     # Указываем реальное имя колонки в унаследованной БД.
     tax_officer = models.ForeignKey(TaxOfficer, on_delete=models.DO_NOTHING, db_column='"Ключ сотрудника"')
