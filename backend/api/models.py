@@ -6,6 +6,8 @@ class Taxpayer(models.Model):
     inn = models.CharField(max_length=12, unique=True)
     full_name = models.TextField(blank=True, null=True)
     short_name = models.TextField(blank=True, null=True)
+    fio = models.TextField(blank=True, null=True)  # Добавьте это поле
+    payer_type_id = models.IntegerField()  # Добавьте это поле
 
     class Meta:
         managed = False

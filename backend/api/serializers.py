@@ -4,7 +4,7 @@ from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase
 class TaxpayerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Taxpayer
-        fields = ['taxpayer_id', 'full_name', 'short_name', 'inn']
+        fields = ['taxpayer_id', 'fio', 'full_name', 'short_name', 'inn', 'payer_type_id']
 
 class TaxAccrualSerializer(serializers.ModelSerializer):
     class Meta:

@@ -206,3 +206,62 @@ class CustomTokenRefreshView(TokenRefreshView):
             "inn": inn,
             "user_type": user_type
         })
+    
+class CurrentTaxpayerAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        user_inn = request.user.username
+        try:
+            taxpayer = Taxpayer.objects.get(inn=user_inn)
+            return Response({
+                'taxpayer_id': taxpayer.taxpayer_id,
+                'inn': taxpayer.inn,
+                'fio': taxpayer.fio,
+                'full_name': taxpayer.full_name,
+                'short_name': taxpayer.short_name,
+                'payer_type_id': taxpayer.payer_type_id
+            })
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=404)
+
+class LatestRiskScoreAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        user_inn = request.user.username
+        try:
+            # Находим налогоплательщика
+            taxpayer = Taxpayer.objects.get(inn=user_inn)
+            
+            # Получаем последний RiskScore из таблицы taxpayer_rating
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT rating_value 
+                    FROM taxpayer_rating 
+                    WHERE taxpayer_id = %s 
+                    ORDER BY rating_date DESC 
+                    LIMIT 1
+                """, [taxpayer.taxpayer_id])
+                result = cursor.fetchone()
+                
+            if result and result[0] is not None:
+                risk_score_value = int(result[0]) if result[0] else 0
+                return Response({'risk_score': risk_score_value})
+            else:
+                # Если нет записи, рассчитываем текущий RiskScore
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT calculate_risk_score(%s)", [taxpayer.taxpayer_id])
+                    result = cursor.fetchone()
+                    if result and result[0] is not None:
+                        risk_score_value = int(result[0]) if result[0] else 0
+                        return Response({'risk_score': risk_score_value})
+                
+                return Response({'risk_score': 0})
+                
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=404)
+        except Exception as e:
+            return Response({'error': f'Ошибка: {str(e)}'}, status=500)

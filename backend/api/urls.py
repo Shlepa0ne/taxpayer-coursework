@@ -8,7 +8,9 @@ from .views import (
     ReduceBaseListAPIView,
     TaxpayerLoginAPIView, 
     WorkerLoginAPIView,
-    CustomTokenRefreshView
+    CustomTokenRefreshView,
+    CurrentTaxpayerAPIView,
+    LatestRiskScoreAPIView
 )
 
 urlpatterns = [
@@ -24,4 +26,6 @@ urlpatterns = [
     path('auth/login/', TaxpayerLoginAPIView.as_view(), name='auth-login'),
     path('auth/login-workers/', WorkerLoginAPIView.as_view(), name='auth-login-workers'),
     path('auth/token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
+    path('current-taxpayer/', CurrentTaxpayerAPIView.as_view(), name='current-taxpayer'),
+    path('latest-risk-score/', LatestRiskScoreAPIView.as_view(), name='latest-risk-score'),
 ]

@@ -15,9 +15,10 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [accessToken, setAccessToken] = useState(null);
   const [userRole, setUserRole] = useState(null);
-  const [isLoading, setIsLoading] = useState(true); // Добавляем состояние загрузки
+  const [user, setUser] = useState(null); // Добавляем полные данные пользователя
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Функция для проверки аутентификации
+  // Функция для проверки аутентификации и получения данных из токена
   const checkAuth = () => {
     const tokenString = localStorage.getItem('authTokens');
     if (tokenString) {
@@ -29,7 +30,15 @@ export function AuthProvider({ children }) {
           if (payload.exp * 1000 > Date.now()) {
             setIsAuthenticated(true);
             setAccessToken(tokens.access);
-            setUserRole(tokens.role);
+            setUserRole(payload.user_type);
+            
+            // Устанавливаем полные данные пользователя из токена
+            setUser({
+              username: payload.inn,
+              user_type: payload.user_type,
+              inn: payload.inn // Добавляем ИНН явно
+            });
+            
             setIsLoading(false);
             return true;
           } else {
@@ -45,6 +54,7 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
     setAccessToken(null);
     setUserRole(null);
+    setUser(null);
     setIsLoading(false);
     return false;
   };
@@ -54,21 +64,20 @@ export function AuthProvider({ children }) {
     checkAuth();
   }, []);
 
-  // Слушаем изменения localStorage из других вкладок
-  useEffect(() => {
-    const handleStorageChange = () => {
-      checkAuth();
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
   const login = (tokens) => {
     localStorage.setItem('authTokens', JSON.stringify(tokens));
+    
+    // Парсим данные пользователя из access токена
+    const payload = JSON.parse(atob(tokens.access.split('.')[1]));
+    
     setIsAuthenticated(true);
     setAccessToken(tokens.access);
-    setUserRole(tokens.role);
+    setUserRole(payload.user_type);
+    setUser({
+      username: payload.inn,
+      user_type: payload.user_type,
+      inn: payload.inn
+    });
     setIsLoading(false);
   };
 
@@ -83,6 +92,7 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
     setAccessToken(null);
     setUserRole(null);
+    setUser(null);
     setIsLoading(false);
   };
 
@@ -90,7 +100,8 @@ export function AuthProvider({ children }) {
     isAuthenticated,
     accessToken,
     userRole,
-    isLoading, // Экспортируем состояние загрузки
+    user, // Экспортируем полные данные пользователя
+    isLoading,
     login,
     logout,
     checkAuth

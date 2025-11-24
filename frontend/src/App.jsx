@@ -1,3 +1,4 @@
+// frontend/src/App.js
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -6,10 +7,32 @@ import { useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import LoginWorkersPage from './pages/LoginWorkersPage';
 import DashboardPage from './pages/DashboardPage';
+import DashboardHome from './pages/DashboardHome'; // Новая главная страница
 import MyTaxesPage from './pages/MyTaxesPage';
 import TaxReduceRequestPage from './pages/TaxReduceRequestPage';
 import Spinner from './components/ui/Spinner';
 import WorkersDashboardPlaceholder from './pages/WorkersDashboardPlaceholder';
+
+// Заглушки для новых страниц
+const DeclarationsPage = () => (
+  <div className="card">
+    <div className="card-body text-center py-5">
+      <i className="bi bi-file-earmark-pdf display-1 text-muted mb-3"></i>
+      <h3>Декларации</h3>
+      <p className="text-muted">Раздел в разработке</p>
+    </div>
+  </div>
+);
+
+const ProfilePage = () => (
+  <div className="card">
+    <div className="card-body text-center py-5">
+      <i className="bi bi-person-gear display-1 text-muted mb-3"></i>
+      <h3>Настройка профиля</h3>
+      <p className="text-muted">Раздел в разработке</p>
+    </div>
+  </div>
+);
 
 // Компонент-обертка для защиты роутов
 function ProtectedRoute({ children }) {
@@ -55,8 +78,12 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<MyTaxesPage />} />
+        <Route index element={<DashboardHome />} /> {/* Новая главная страница */}
+        <Route path="accruals" element={<MyTaxesPage />} />
         <Route path="new-request" element={<TaxReduceRequestPage />} />
+        <Route path="requests" element={<TaxReduceRequestPage />} /> {/* Можно объединить или разделить */}
+        <Route path="declarations" element={<DeclarationsPage />} />
+        <Route path="profile" element={<ProfilePage />} />
       </Route>
     </Routes>
   );

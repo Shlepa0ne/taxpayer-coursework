@@ -33,3 +33,15 @@ export const getReduceBases = async () => {
     const { data } = await axiosInstance.get('/reduce-bases/');
     return data;
 }
+
+// Получаем данные текущего налогоплательщика
+export const getCurrentTaxpayer = async () => {
+    const { data } = await axiosInstance.get('/current-taxpayer/');
+    return data;
+}
+
+// Получаем последний RiskScore для текущего пользователя
+export const getLatestRiskScore = async () => {
+    const { data } = await axiosInstance.get('/latest-risk-score/');
+    return data;
+}
