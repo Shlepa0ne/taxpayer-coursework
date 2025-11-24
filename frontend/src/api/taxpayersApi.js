@@ -123,3 +123,8 @@ export const getPeriods = async () => {
   const { data } = await axiosInstance.get('/periods/');
   return data;
 };
+
+export const getRiskScoreHistory = async () => {
+  const { data } = await axiosInstance.get('/risk-score-history/');
+  return data;
+};

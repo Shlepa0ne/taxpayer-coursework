@@ -252,18 +252,20 @@ class LatestRiskScoreAPIView(APIView):
             taxpayer = Taxpayer.objects.get(inn=user_inn)
             
             # Получаем последний RiskScore из таблицы taxpayer_rating
+            # Используем rating_id для гарантии получения самой последней записи
             with connection.cursor() as cursor:
                 cursor.execute("""
-                    SELECT rating_value 
+                    SELECT rating_value, rating_date 
                     FROM taxpayer_rating 
                     WHERE taxpayer_id = %s 
-                    ORDER BY rating_date DESC 
+                    ORDER BY rating_id DESC 
                     LIMIT 1
                 """, [taxpayer.taxpayer_id])
                 result = cursor.fetchone()
                 
             if result and result[0] is not None:
                 risk_score_value = int(result[0]) if result[0] else 0
+                print(f"DEBUG: Found RiskScore {risk_score_value} for taxpayer {taxpayer.taxpayer_id}")  # Для отладки
                 return Response({'risk_score': risk_score_value})
             else:
                 # Если нет записи, рассчитываем текущий RiskScore
@@ -281,6 +283,38 @@ class LatestRiskScoreAPIView(APIView):
         except Exception as e:
             return Response({'error': f'Ошибка: {str(e)}'}, status=500)
         
+class RiskScoreHistoryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        user_inn = request.user.username
+        try:
+            taxpayer = Taxpayer.objects.get(inn=user_inn)
+            
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT rating_id, rating_value, rating_date 
+                    FROM taxpayer_rating 
+                    WHERE taxpayer_id = %s 
+                    ORDER BY rating_id DESC
+                """, [taxpayer.taxpayer_id])
+                results = cursor.fetchall()
+                
+            history = []
+            for row in results:
+                history.append({
+                    'rating_id': row[0],
+                    'risk_score': int(row[1]) if row[1] is not None else 0,
+                    'rating_date': row[2]
+                })
+            
+            return Response({'history': history})
+            
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=404)
+        except Exception as e:
+            return Response({'error': f'Ошибка: {str(e)}'}, status=500)
 
 class ProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]

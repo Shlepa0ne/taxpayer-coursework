@@ -20,6 +20,7 @@ from .views import (
     MyDeclarationsAPIView,
     CreateDeclarationAPIView,
     TaxTypeListAPIView,
+    RiskScoreHistoryAPIView
 )
 
 urlpatterns = [
@@ -46,4 +47,5 @@ urlpatterns = [
     path('my-declarations/', MyDeclarationsAPIView.as_view(), name='my-declarations'),
     path('declarations/', CreateDeclarationAPIView.as_view(), name='create-declaration'),
     path('tax-types/', TaxTypeListAPIView.as_view(), name='tax-types'),
+    path('risk-score-history/', RiskScoreHistoryAPIView.as_view(), name='risk-score-history'),
 ]
