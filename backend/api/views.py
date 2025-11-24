@@ -265,7 +265,6 @@ class LatestRiskScoreAPIView(APIView):
                 
             if result and result[0] is not None:
                 risk_score_value = int(result[0]) if result[0] else 0
-                print(f"DEBUG: Found RiskScore {risk_score_value} for taxpayer {taxpayer.taxpayer_id}")  # Для отладки
                 return Response({'risk_score': risk_score_value})
             else:
                 # Если нет записи, рассчитываем текущий RiskScore
@@ -511,8 +510,33 @@ class MyTaxAccrualsWithPaymentsAPIView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         user_inn = user.username
-        return TaxAccrual.objects.filter(taxpayer__inn=user_inn).select_related('object', 'object__object_type')
-    
+        
+        try:
+            current_taxpayer = Taxpayer.objects.get(inn=user_inn)
+            
+            # Получаем начисления, где пользователь является налогоплательщиком
+            taxpayer_accruals = TaxAccrual.objects.filter(taxpayer__inn=user_inn)
+            
+            # Получаем начисления от деклараций 6-НДФЛ, которые пользователь подал за других
+            # Используем exclude вместо __ne
+            declarant_accruals = TaxAccrual.objects.filter(
+                declaration__who_declares=current_taxpayer
+            ).exclude(declaration__taxpayer__inn=user_inn)  # Исключаем свои же 3-НДФЛ
+            
+            # Объединяем два QuerySet
+            all_accruals = (taxpayer_accruals | declarant_accruals).distinct()
+            
+            return all_accruals.select_related(
+                'object', 
+                'object__object_type',
+                'declaration',
+                'declaration__taxpayer',
+                'declaration__who_declares'
+            ).order_by('-accrual_date')
+            
+        except Taxpayer.DoesNotExist:
+            return TaxAccrual.objects.none()
+        
 class MyDeclarationsAPIView(generics.ListAPIView):
     serializer_class = DeclarationListSerializer
     permission_classes = [IsAuthenticated]

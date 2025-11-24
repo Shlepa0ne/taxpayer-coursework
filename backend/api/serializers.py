@@ -102,6 +102,9 @@ class TaxAccrualWithPaymentSerializer(serializers.ModelSerializer):
     object_name = serializers.CharField(source='object.object_name', read_only=True, allow_null=True)
     object_address = serializers.CharField(source='object.object_address', read_only=True, allow_null=True)
     tax_type_name = serializers.SerializerMethodField()
+    declaration_info = serializers.SerializerMethodField()
+    is_6ndfl_accrual = serializers.SerializerMethodField()
+    declarant_info = serializers.SerializerMethodField()
     
     class Meta:
         model = TaxAccrual
@@ -109,7 +112,8 @@ class TaxAccrualWithPaymentSerializer(serializers.ModelSerializer):
             'tax_accrual_id', 'accrual_date', 'accrual_amount', 
             'due_date', 'paid_amount', 'remaining_amount', 'is_overdue',
             'income_status_id', 'income_status_name', 'accrual_reason',
-            'object_name', 'object_address', 'tax_type_name', 'declaration_id'
+            'object_name', 'object_address', 'tax_type_name', 'declaration',
+            'declaration_info', 'is_6ndfl_accrual', 'declarant_info'
         ]
     
     def get_paid_amount(self, obj):
@@ -136,7 +140,6 @@ class TaxAccrualWithPaymentSerializer(serializers.ModelSerializer):
         return status_map.get(obj.income_status_id, "неизвестно")
     
     def get_tax_type_name(self, obj):
-        # Обновленный маппинг типов налогов согласно вашей таблице tax_type
         tax_type_map = {
             13: "Налог на доходы физических лиц (НДФЛ)",
             14: "Транспортный налог",
@@ -151,10 +154,85 @@ class TaxAccrualWithPaymentSerializer(serializers.ModelSerializer):
             if obj.object.object_type:
                 object_type = obj.object.object_type.object_type_name.lower()
             return f"Налог на {object_type}"
-        elif obj.declaration_id:
-            return f"Налог по декларации #{obj.declaration_id}"
+        elif obj.declaration:
+            declaration_info = self.get_declaration_info(obj)
+            if declaration_info and declaration_info.get('is_6ndfl'):
+                if declaration_info.get('is_declarant'):
+                    return f"НДФЛ за сотрудника {declaration_info.get('target_name', '')}"
+                else:
+                    return f"НДФЛ от работодателя {declaration_info.get('declarant_name', '')}"
+            return f"Налог по декларации #{obj.declaration.declaration_id}"
         else:
             return f"{self.get_tax_type_name(obj)}"
+    
+    def get_declaration_info(self, obj):
+        """Получает информацию о декларации для начисления"""
+        if not obj.declaration:
+            return None
+        
+        try:
+            declaration = obj.declaration
+            
+            # Определяем, является ли это 6-НДФЛ
+            is_6ndfl = declaration.who_declares_id != declaration.taxpayer_id
+            
+            # Определяем, является ли текущий пользователь тем, кто подал декларацию
+            current_taxpayer = None
+            request = self.context.get('request')
+            if request and hasattr(request, 'user'):
+                user_inn = request.user.username
+                try:
+                    current_taxpayer = Taxpayer.objects.get(inn=user_inn)
+                except Taxpayer.DoesNotExist:
+                    pass
+            
+            is_declarant = current_taxpayer and declaration.who_declares_id == current_taxpayer.taxpayer_id
+            
+            info = {
+                'is_6ndfl': is_6ndfl,
+                'is_declarant': is_declarant,
+                'declaration_type': '6-НДФЛ' if is_6ndfl else '3-НДФЛ'
+            }
+            
+            if is_6ndfl:
+                # Для 6-НДФЛ добавляем информацию о том, кто подал и за кого
+                info.update({
+                    'declarant_name': self._get_taxpayer_display_name(declaration.who_declares),
+                    'target_name': self._get_taxpayer_display_name(declaration.taxpayer),
+                    'declarant_inn': declaration.who_declares.inn,
+                    'target_inn': declaration.taxpayer.inn
+                })
+            
+            return info
+            
+        except Exception as e:
+            print(f"Error getting declaration info: {e}")
+            return None
+    
+    def get_is_6ndfl_accrual(self, obj):
+        declaration_info = self.get_declaration_info(obj)
+        return declaration_info and declaration_info.get('is_6ndfl', False)
+    
+    def get_declarant_info(self, obj):
+        declaration_info = self.get_declaration_info(obj)
+        if declaration_info and declaration_info.get('is_6ndfl'):
+            return {
+                'declarant_name': declaration_info.get('declarant_name'),
+                'target_name': declaration_info.get('target_name'),
+                'is_declarant': declaration_info.get('is_declarant')
+            }
+        return None
+    
+    def _get_taxpayer_display_name(self, taxpayer):
+        """Форматирует имя налогоплательщика для отображения"""
+        if taxpayer.fio:
+            return taxpayer.fio
+        elif taxpayer.full_name:
+            return taxpayer.full_name
+        elif taxpayer.short_name:
+            return taxpayer.short_name
+        else:
+            return f"ИНН {taxpayer.inn}"
 
 class TaxPaymentSerializer(serializers.ModelSerializer):
     class Meta:

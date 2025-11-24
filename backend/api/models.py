@@ -49,7 +49,7 @@ class TaxAccrual(models.Model):
     income_status_id = models.IntegerField()
     object = models.ForeignKey('TaxableObject', on_delete=models.DO_NOTHING, blank=True, null=True, db_column='object_id')
     tax_type_id = models.IntegerField()
-    declaration_id = models.IntegerField(blank=True, null=True)
+    declaration = models.ForeignKey('Declaration', on_delete=models.DO_NOTHING, blank=True, null=True, db_column='declaration_id')  # ИЗМЕНЕНО: добавлен ForeignKey
 
     class Meta:
         managed = False

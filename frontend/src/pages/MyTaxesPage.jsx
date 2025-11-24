@@ -13,6 +13,7 @@ const MyTaxesPage = () => {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [filter, setFilter] = useState('all'); // 'all', 'own', '6ndfl_employer', '6ndfl_employee'
 
   useEffect(() => {
     fetchAccruals();
@@ -60,6 +61,24 @@ const MyTaxesPage = () => {
       // Если приоритет одинаковый, сортируем по дате начисления (новые сверху)
       return new Date(b.accrual_date) - new Date(a.accrual_date);
     });
+  };
+
+  // Функция для фильтрации начислений
+  const filterAccruals = (accruals) => {
+    switch (filter) {
+      case 'own':
+        return accruals.filter(accrual => !accrual.is_6ndfl_accrual);
+      case '6ndfl_employer':
+        return accruals.filter(accrual => 
+          accrual.is_6ndfl_accrual && accrual.declarant_info?.is_declarant
+        );
+      case '6ndfl_employee':
+        return accruals.filter(accrual => 
+          accrual.is_6ndfl_accrual && !accrual.declarant_info?.is_declarant
+        );
+      default:
+        return accruals;
+    }
   };
 
   const handlePaymentClick = (accrual) => {
@@ -136,6 +155,14 @@ const MyTaxesPage = () => {
 
   // Функция для получения иконки типа объекта
   const getObjectIcon = (accrual) => {
+    if (accrual.is_6ndfl_accrual) {
+      if (accrual.declarant_info?.is_declarant) {
+        return 'bi-person-check'; // Работодатель - подал за сотрудника
+      } else {
+        return 'bi-person-vcard'; // Сотрудник - за него подали
+      }
+    }
+    
     if (accrual.object_name) {
       if (accrual.tax_type_name?.includes('Транспортный')) return 'bi-car-front';
       if (accrual.tax_type_name?.includes('имущество')) return 'bi-house';
@@ -149,6 +176,14 @@ const MyTaxesPage = () => {
 
   // Функция для получения цвета типа объекта
   const getObjectColor = (accrual) => {
+    if (accrual.is_6ndfl_accrual) {
+      if (accrual.declarant_info?.is_declarant) {
+        return 'warning'; // Работодатель - оранжевый
+      } else {
+        return 'info'; // Сотрудник - синий
+      }
+    }
+    
     if (accrual.object_name) {
       if (accrual.tax_type_name?.includes('Транспортный')) return 'info';
       if (accrual.tax_type_name?.includes('имущество')) return 'primary';
@@ -158,6 +193,26 @@ const MyTaxesPage = () => {
     if (accrual.tax_type_name?.includes('НДФЛ')) return 'warning';
     if (accrual.tax_type_name?.includes('НДС')) return 'danger';
     return 'secondary';
+  };
+
+  // Функция для отображения дополнительной информации о 6-НДФЛ
+  const render6NdflInfo = (accrual) => {
+    if (!accrual.is_6ndfl_accrual || !accrual.declarant_info) return null;
+
+    const { is_declarant, declarant_name, target_name } = accrual.declarant_info;
+
+    return (
+      <div className="mt-2 p-2 bg-light rounded">
+        <small className="text-muted d-block">
+          <i className="bi bi-info-circle me-1"></i>
+          {is_declarant ? (
+            <>Вы подали 6-НДФЛ за сотрудника: <strong>{target_name}</strong></>
+          ) : (
+            <>Работодатель <strong>{declarant_name}</strong> подал 6-НДФЛ за вас</>
+          )}
+        </small>
+      </div>
+    );
   };
 
   if (loading) return <Spinner />;
@@ -181,6 +236,53 @@ const MyTaxesPage = () => {
         </div>
       </div>
 
+      {/* Фильтры */}
+      <div className="row mb-4">
+        <div className="col-12">
+          <div className="card border-0 bg-light">
+            <div className="card-body py-3">
+              <div className="row align-items-center">
+                <div className="col-md-3">
+                  <h6 className="mb-0">Фильтр начислений:</h6>
+                </div>
+                <div className="col-md-9">
+                  <div className="btn-group" role="group">
+                    <button
+                      type="button"
+                      className={`btn btn-${filter === 'all' ? 'primary' : 'outline-primary'}`}
+                      onClick={() => setFilter('all')}
+                    >
+                      Все начисления
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-${filter === 'own' ? 'primary' : 'outline-primary'}`}
+                      onClick={() => setFilter('own')}
+                    >
+                      Личные налоги
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-${filter === '6ndfl_employer' ? 'warning' : 'outline-warning'}`}
+                      onClick={() => setFilter('6ndfl_employer')}
+                    >
+                      6-НДФЛ (как работодатель)
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-${filter === '6ndfl_employee' ? 'info' : 'outline-info'}`}
+                      onClick={() => setFilter('6ndfl_employee')}
+                    >
+                      6-НДФЛ (как сотрудник)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {error && (
         <div className="alert alert-danger">
           <i className="bi bi-exclamation-triangle me-2"></i>
@@ -190,23 +292,27 @@ const MyTaxesPage = () => {
 
       {/* Карточки начислений */}
       <div className="row">
-        {accruals.length === 0 ? (
+        {filterAccruals(accruals).length === 0 ? (
           <div className="col-12">
             <div className="card border-0 text-center py-5">
               <div className="card-body">
                 <i className="bi bi-receipt display-1 text-muted mb-3"></i>
                 <h3 className="text-muted">Нет данных о начислениях</h3>
                 <p className="text-muted">
-                  У вас пока нет налоговых начислений
+                  {filter === 'all' && 'У вас пока нет налоговых начислений'}
+                  {filter === 'own' && 'У вас нет личных налоговых начислений'}
+                  {filter === '6ndfl_employer' && 'У вас нет начислений по 6-НДФЛ как работодатель'}
+                  {filter === '6ndfl_employee' && 'У вас нет начислений по 6-НДФЛ как сотрудник'}
                 </p>
               </div>
             </div>
           </div>
         ) : (
-          accruals.map(accrual => (
+          filterAccruals(accruals).map(accrual => (
             <div key={accrual.tax_accrual_id} className="col-xl-4 col-md-6 mb-4">
               <div className={`card border-0 shadow-sm h-100 ${
-                accrual.is_overdue ? 'border-danger' : ''
+                accrual.is_overdue ? 'border-danger' : 
+                accrual.is_6ndfl_accrual ? (accrual.declarant_info?.is_declarant ? 'border-warning' : 'border-info') : ''
               }`}>
                 <div className="card-header bg-transparent border-0 pb-0">
                   <div className="d-flex justify-content-between align-items-center">
@@ -234,11 +340,12 @@ const MyTaxesPage = () => {
                         {accrual.object_address || accrual.object_name}
                       </div>
                     )}
-                    {accrual.tax_type_name && (
+                    {accrual.tax_type_name && !accrual.is_6ndfl_accrual && (
                       <div className="small text-muted mt-1">
                         {accrual.tax_type_name}
                       </div>
                     )}
+                    {render6NdflInfo(accrual)}
                   </div>
 
                   <div className="mb-3">
@@ -305,7 +412,11 @@ const MyTaxesPage = () => {
                 <div className="card-footer bg-transparent border-0 pt-0">
                   {accrual.remaining_amount > 0 && (
                     <button
-                      className="btn btn-primary w-100"
+                      className={`btn w-100 ${
+                        accrual.is_6ndfl_accrual ? 
+                        (accrual.declarant_info?.is_declarant ? 'btn-warning' : 'btn-info') : 
+                        'btn-primary'
+                      }`}
                       onClick={() => handlePaymentClick(accrual)}
                       disabled={paymentLoading}
                     >
@@ -340,6 +451,22 @@ const MyTaxesPage = () => {
               
               <form onSubmit={handlePaymentSubmit}>
                 <div className="modal-body">
+                  {/* Информация о 6-НДФЛ */}
+                  {selectedAccrual?.is_6ndfl_accrual && selectedAccrual?.declarant_info && (
+                    <div className="alert alert-warning mb-3">
+                      <i className="bi bi-exclamation-triangle me-2"></i>
+                      {selectedAccrual.declarant_info.is_declarant ? (
+                        <span>
+                          Вы оплачиваете НДФЛ за сотрудника: <strong>{selectedAccrual.declarant_info.target_name}</strong>
+                        </span>
+                      ) : (
+                        <span>
+                          НДФЛ оплачивает работодатель: <strong>{selectedAccrual.declarant_info.declarant_name}</strong>
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Информация о начислении */}
                   <div className="card border-0 bg-light mb-3">
                     <div className="card-body">
@@ -360,7 +487,7 @@ const MyTaxesPage = () => {
                             {selectedAccrual.object_address || selectedAccrual.object_name}
                           </div>
                         )}
-                        {selectedAccrual.tax_type_name && (
+                        {selectedAccrual.tax_type_name && !selectedAccrual.is_6ndfl_accrual && (
                           <div className="small text-muted mt-1">
                             {selectedAccrual.tax_type_name}
                           </div>
@@ -510,7 +637,7 @@ const MyTaxesPage = () => {
                 Важная информация
               </h5>
               <div className="row">
-                <div className="col-md-4 mb-3 mt-3">
+                <div className="col-md-4 mb-3">
                   <div className="d-flex align-items-center">
                     <i className="bi bi-clock-history text-warning fs-4 me-3"></i>
                     <div>
@@ -521,7 +648,7 @@ const MyTaxesPage = () => {
                     </div>
                   </div>
                 </div>
-                <div className="col-md-4 mb-3 mt-3">
+                <div className="col-md-4 mb-3">
                   <div className="d-flex align-items-center">
                     <i className="bi bi-shield-check text-success fs-4 me-3"></i>
                     <div>
@@ -532,7 +659,7 @@ const MyTaxesPage = () => {
                     </div>
                   </div>
                 </div>
-                <div className="col-md-4 mb-3 mt-3">
+                <div className="col-md-4 mb-3">
                   <div className="d-flex align-items-center">
                     <i className="bi bi-telephone text-primary fs-4 me-3"></i>
                     <div>
