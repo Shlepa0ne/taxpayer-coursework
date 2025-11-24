@@ -33,3 +33,24 @@ class ReduceBaseSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     inn = serializers.CharField(max_length=32)
     password = serializers.CharField(write_only=True)
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Taxpayer
+        fields = [
+            'taxpayer_id', 'inn', 'fio', 'full_name', 'short_name', 
+            'birth_date', 'registration_address', 'fact_address',
+            'ogrn', 'registration_date', 'bank_detals', 'start_date',
+            'end_date', 'executive_list', 'payer_type_id'
+        ]
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True, min_length=6)
+    confirm_password = serializers.CharField(required=True, write_only=True)
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError("Новые пароли не совпадают")
+        return attrs

@@ -12,6 +12,7 @@ import MyTaxesPage from './pages/MyTaxesPage';
 import TaxReduceRequestPage from './pages/TaxReduceRequestPage';
 import Spinner from './components/ui/Spinner';
 import WorkersDashboardPlaceholder from './pages/WorkersDashboardPlaceholder';
+import ProfilePage from './pages/ProfilePage';
 
 // Заглушки для новых страниц
 const DeclarationsPage = () => (
@@ -19,16 +20,6 @@ const DeclarationsPage = () => (
     <div className="card-body text-center py-5">
       <i className="bi bi-file-earmark-pdf display-1 text-muted mb-3"></i>
       <h3>Декларации</h3>
-      <p className="text-muted">Раздел в разработке</p>
-    </div>
-  </div>
-);
-
-const ProfilePage = () => (
-  <div className="card">
-    <div className="card-body text-center py-5">
-      <i className="bi bi-person-gear display-1 text-muted mb-3"></i>
-      <h3>Настройка профиля</h3>
       <p className="text-muted">Раздел в разработке</p>
     </div>
   </div>

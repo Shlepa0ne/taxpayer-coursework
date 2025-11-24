@@ -10,7 +10,9 @@ from .views import (
     WorkerLoginAPIView,
     CustomTokenRefreshView,
     CurrentTaxpayerAPIView,
-    LatestRiskScoreAPIView
+    LatestRiskScoreAPIView,
+    ProfileDetailAPIView, 
+    ChangePasswordAPIView
 )
 
 urlpatterns = [
@@ -28,4 +30,6 @@ urlpatterns = [
     path('auth/token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
     path('current-taxpayer/', CurrentTaxpayerAPIView.as_view(), name='current-taxpayer'),
     path('latest-risk-score/', LatestRiskScoreAPIView.as_view(), name='latest-risk-score'),
+    path('profile/', ProfileDetailAPIView.as_view(), name='profile-detail'),
+    path('change-password/', ChangePasswordAPIView.as_view(), name='change-password'),
 ]

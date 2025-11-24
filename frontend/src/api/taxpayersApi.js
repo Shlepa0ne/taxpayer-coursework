@@ -45,3 +45,26 @@ export const getLatestRiskScore = async () => {
     const { data } = await axiosInstance.get('/latest-risk-score/');
     return data;
 }
+
+
+export const getProfile = async () => {
+    try {
+        const { data } = await axiosInstance.get('/profile/');
+        return data;
+    } catch (error) {
+        console.error('API Error:', error.response?.data);
+        throw error;
+    }
+}
+
+export const changePassword = async (passwordData) => {
+    try {
+        const { data } = await axiosInstance.post('/change-password/', passwordData);
+        return data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(error.response.data.error || 'Ошибка при смене пароля');
+        }
+        throw new Error('Ошибка сети');
+    }
+}

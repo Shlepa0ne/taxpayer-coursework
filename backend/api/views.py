@@ -12,7 +12,9 @@ from .serializers import (
     RiskScoreInputSerializer,
     RiskScoreOutputSerializer,
     ReduceBaseSerializer,
-    LoginSerializer
+    LoginSerializer,
+    ProfileSerializer,
+    ChangePasswordSerializer
 )
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -20,6 +22,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from .authentication import InnAuthentication
+from django.contrib.auth.hashers import check_password, make_password
 
 
 class TaxpayerListAPIView(generics.ListAPIView):
@@ -265,3 +268,56 @@ class LatestRiskScoreAPIView(APIView):
             return Response({'error': 'Налогоплательщик не найден'}, status=404)
         except Exception as e:
             return Response({'error': f'Ошибка: {str(e)}'}, status=500)
+        
+
+class ProfileDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        user_inn = request.user.username
+        try:
+            taxpayer = Taxpayer.objects.get(inn=user_inn)
+            serializer = ProfileSerializer(taxpayer)
+            return Response(serializer.data)
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=404)
+
+class ChangePasswordAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        user = request.user
+        serializer = ChangePasswordSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        current_password = serializer.validated_data['current_password']
+        new_password = serializer.validated_data['new_password']
+        
+        try:
+            # Проверяем, является ли пользователь налогоплательщиком
+            if user.user_type == 'taxpayer':
+                auth_record = TaxpayerAuth.objects.get(inn=user.inn)
+            elif user.user_type == 'worker':
+                auth_record = WorkerAuth.objects.get(inn=user.inn)
+            else:
+                return Response({'error': 'Неизвестный тип пользователя'}, status=400)
+            
+            # Проверяем текущий пароль
+            if not check_password(current_password, auth_record.password_hash):
+                return Response(
+                    {'error': 'Текущий пароль неверен'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Обновляем пароль
+            auth_record.password_hash = make_password(new_password)
+            auth_record.save()
+            
+            return Response({'message': 'Пароль успешно изменен'})
+            
+        except (TaxpayerAuth.DoesNotExist, WorkerAuth.DoesNotExist):
+            return Response({'error': 'Пользователь не найден'}, status=404)

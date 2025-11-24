@@ -1,5 +1,6 @@
 // frontend/src/pages/DashboardHome.jsx
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom'; // Добавьте этот импорт
 import { getMyAccruals } from '../api/taxpayersApi';
 import { getLatestRiskScore } from '../api/taxpayersApi';
 import { useAuth } from '../context/AuthContext';
@@ -144,18 +145,18 @@ const DashboardHome = () => {
               <div className="row">
                 <div className="col-md-3 mb-3">
                   <div className="d-grid">
-                    <a href="/accruals" className="btn btn-outline-primary">
+                    <Link to="/accruals" className="btn btn-outline-primary">
                       <i className="bi bi-list-ul me-2"></i>
                       Просмотреть начисления
-                    </a>
+                    </Link>
                   </div>
                 </div>
                 <div className="col-md-3 mb-3">
                   <div className="d-grid">
-                    <a href="/new-request" className="btn btn-outline-success">
+                    <Link to="/new-request" className="btn btn-outline-success">
                       <i className="bi bi-file-earmark-text me-2"></i>
                       Подать заявление
-                    </a>
+                    </Link>
                   </div>
                 </div>
                 <div className="col-md-3 mb-3">
@@ -168,10 +169,10 @@ const DashboardHome = () => {
                 </div>
                 <div className="col-md-3 mb-3">
                   <div className="d-grid">
-                    <button className="btn btn-outline-secondary" disabled>
+                    <Link to="/profile" className="btn btn-outline-secondary">
                       <i className="bi bi-gear me-2"></i>
                       Профиль
-                    </button>
+                    </Link>
                   </div>
                 </div>
               </div>

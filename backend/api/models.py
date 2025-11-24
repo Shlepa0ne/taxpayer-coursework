@@ -1,13 +1,31 @@
 from django.db import models
 
 # Модель, описывающая налогоплательщика.
+# models.py
 class Taxpayer(models.Model):
     taxpayer_id = models.AutoField(primary_key=True)
     inn = models.CharField(max_length=12, unique=True)
+    creation_date = models.DateTimeField(blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    update_date = models.DateTimeField(blank=True, null=True)
+    fio = models.TextField(blank=True, null=True)
+    birth_date = models.DateField(blank=True, null=True)
+    registration_address = models.TextField(blank=True, null=True)
+    fact_address = models.TextField(blank=True, null=True)
+    ogrn = models.CharField(max_length=15, blank=True, null=True)
+    registration_date = models.DateField(blank=True, null=True)
+    bank_detals = models.CharField(max_length=20, blank=True, null=True)
+    start_date = models.DateField(blank=True, null=True)
+    end_date = models.DateField(blank=True, null=True)
     full_name = models.TextField(blank=True, null=True)
     short_name = models.TextField(blank=True, null=True)
-    fio = models.TextField(blank=True, null=True)  # Добавьте это поле
+    executive_list = models.TextField(blank=True, null=True)
+    payer_status_id = models.IntegerField()
+    region_key = models.IntegerField()
+    opf_id = models.IntegerField()
+    tax_regime_id = models.IntegerField()
     payer_type_id = models.IntegerField()  # Добавьте это поле
+    origin_id = models.IntegerField()
 
     class Meta:
         managed = False
