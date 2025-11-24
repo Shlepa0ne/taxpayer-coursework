@@ -67,10 +67,7 @@ const DashboardHome = () => {
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Обзор налоговой ситуации</h2>
-        <div className="text-muted">
-          ИНН: {user?.inn || user?.username}
-        </div>
+        <h2>Обзор Вашей налоговой ситуации</h2>
       </div>
 
       <div className="row">
@@ -80,7 +77,7 @@ const DashboardHome = () => {
             <div className="card-header bg-primary text-white">
               <h5 className="card-title mb-0">
                 <i className="bi bi-graph-up me-2"></i>
-                Risk Score
+                Ваш RiskScore
               </h5>
             </div>
             <div className="card-body text-center">
@@ -93,7 +90,7 @@ const DashboardHome = () => {
                     {getRiskScoreText(riskScore)}
                   </div>
                   <p className="text-muted mt-3">
-                    Оценка налогового риска. Чем ниже показатель, тем ниже риски.
+                    Ваша оценка налогового риска. Чем ниже показатель, тем ниже шансы проверок и тем чище ваша совесть!
                   </p>
                 </>
               ) : (
@@ -127,7 +124,7 @@ const DashboardHome = () => {
                 <div className="alert alert-warning mt-3 mb-0">
                   <small>
                     <i className="bi bi-exclamation-triangle me-1"></i>
-                    Рекомендуем погасить задолженность в ближайшее время
+                    ФНС России рекомендует погасить задолженность в ближайшее время
                   </small>
                 </div>
               )}

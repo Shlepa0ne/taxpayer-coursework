@@ -88,7 +88,6 @@ const DashboardPage = () => {
         </div>
       </header>
       
-      {/* Остальная часть компонента без изменений */}
       <div style={{ display: 'flex', flex: 1 }}>
         <nav className="bg-light border-end" style={{ width: '280px' }}>
           <div className="p-3">
