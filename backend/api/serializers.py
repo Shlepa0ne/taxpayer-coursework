@@ -14,9 +14,28 @@ class TaxAccrualSerializer(serializers.ModelSerializer):
         fields = ['tax_accrual_id', 'accrual_date', 'accrual_amount', 'due_date']
 
 class TaxReduceRequestSerializer(serializers.ModelSerializer):
+    tax_types = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=True
+    )
+    periods = serializers.ListField(
+        child=serializers.DictField(child=serializers.CharField()),
+        write_only=True,
+        required=True
+    )
+    reduce_type = serializers.IntegerField(write_only=True, required=True)
+    
     class Meta:
         model = TaxReduceRequest
-        fields = ['requested_reduce_amount', 'full_description', 'reduce_base']
+        fields = [
+            'requested_reduce_amount', 
+            'full_description', 
+            'reduce_base',
+            'reduce_type',
+            'tax_types',
+            'periods'
+        ]
 
 class RiskScoreInputSerializer(serializers.Serializer):
     taxpayer_id = serializers.IntegerField(
@@ -61,14 +80,50 @@ class TaxReduceRequestListSerializer(serializers.ModelSerializer):
     request_status_name = serializers.CharField(source='request_status.report_status_name', read_only=True)
     reduce_type_name = serializers.CharField(source='reduce_type.reduce_type_name', read_only=True)
     verdict_date = serializers.DateTimeField(read_only=True)
+    periods = serializers.SerializerMethodField()
     
     class Meta:
         model = TaxReduceRequest
         fields = [
             'request_id', 'send_date', 'requested_reduce_amount', 
             'full_description', 'reduce_base_name', 'request_status_name',
-            'reduce_type_name', 'verdict_date'
+            'reduce_type_name', 'verdict_date', 'periods'
         ]
+
+    def get_periods(self, obj):
+        """Получает периоды, связанные с заявлением"""
+        try:
+            # Получаем периоды через связующую таблицу rax_period_tax_reduce_request
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT tp.period_id, tp.start_date, tp.end_date, tp.period_type_id
+                    FROM tax_period tp
+                    INNER JOIN rax_period_tax_reduce_request rptrr ON tp.period_id = rptrr.period_id
+                    WHERE rptrr.request_id = %s
+                """, [obj.request_id])
+                periods_data = cursor.fetchall()
+            
+            periods = []
+            for row in periods_data:
+                period = TaxPeriod(
+                    period_id=row[0],
+                    start_date=row[1],
+                    end_date=row[2],
+                    period_type_id=row[3]
+                )
+                periods.append({
+                    'period_id': period.period_id,
+                    'start_date': period.start_date,
+                    'end_date': period.end_date,
+                    'period_name': period.period_name
+                })
+            
+            return periods
+            
+        except Exception as e:
+            print(f"Error getting periods for request {obj.request_id}: {e}")
+            return []
 
 class TaxableObjectSerializer(serializers.ModelSerializer):
     object_type_name = serializers.CharField(source='object_type.object_type_name', read_only=True)

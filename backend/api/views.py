@@ -35,6 +35,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .authentication import InnAuthentication
 from django.contrib.auth.hashers import check_password, make_password
 from django.db.models import Sum
+from datetime import datetime
 
 
 class TaxpayerListAPIView(generics.ListAPIView):
@@ -87,33 +88,149 @@ class ReduceBaseListAPIView(generics.ListAPIView):
 class CreateTaxReduceRequestAPIView(generics.CreateAPIView):
     serializer_class = TaxReduceRequestSerializer
     permission_classes = [IsAuthenticated]
-    authentication_classes = [InnAuthentication]  # Убедитесь, что он есть
+    authentication_classes = [InnAuthentication]
 
-    def perform_create(self, serializer):
-        user = self.request.user
+    def create(self, request, *args, **kwargs):
+        # Получаем данные из запроса
+        tax_types_data = request.data.get('tax_types', [])
+        periods_data = request.data.get('periods', [])
+        
+        # Создаем копию данных для сериализатора
+        serializer_data = request.data.copy()
+        
+        # Валидируем основными данными
+        serializer = self.get_serializer(data=serializer_data)
+        serializer.is_valid(raise_exception=True)
+        
         try:
-            # Находим все необходимые связанные сущности для установки значений по умолчанию.
-            taxpayer = Taxpayer.objects.get(inn=user.username)
-            default_status = ReportStatus.objects.get(pk=1)
-            default_tax_officer = TaxOfficer.objects.get(pk=1)
-            default_reduce_type = ReduceType.objects.get(pk=1)
-            
-            # Сохраняем заявление, передавая все обязательные, вычисляемые на сервере, поля.
-            serializer.save(
-                taxpayer=taxpayer,
-                send_date=timezone.now(),
-                request_status=default_status,
-                tax_officer=default_tax_officer,
-                reduce_type=default_reduce_type
+            with transaction.atomic():
+                user = self.request.user
+                taxpayer = Taxpayer.objects.get(inn=user.username)
+                default_status = ReportStatus.objects.get(pk=1)
+                default_tax_officer = TaxOfficer.objects.get(pk=1)
+                reduce_type = ReduceType.objects.get(pk=request.data.get('reduce_type', 1))
+                
+                # Создаем заявление
+                tax_reduce_request = TaxReduceRequest.objects.create(
+                    taxpayer=taxpayer,
+                    send_date=timezone.now(),
+                    request_status=default_status,
+                    tax_officer=default_tax_officer,
+                    reduce_type=reduce_type,
+                    requested_reduce_amount=serializer.validated_data['requested_reduce_amount'],
+                    full_description=serializer.validated_data['full_description'],
+                    reduce_base=serializer.validated_data['reduce_base']
+                )
+                
+                # Создаем связи с типами налогов
+                for tax_type_id in tax_types_data:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "INSERT INTO tax_reduce_request_tax_type (request_id, tax_type_id) VALUES (%s, %s)",
+                            [tax_reduce_request.request_id, tax_type_id]
+                        )
+                
+                # Создаем периоды и связи
+                for period_data in periods_data:
+                    start_date = period_data.get('start_date')
+                    end_date = period_data.get('end_date')
+                    
+                    if start_date and end_date:
+                        # Находим или создаем период
+                        period = self.get_or_create_period(start_date, end_date)
+                        
+                        # Создаем связь с заявлением
+                        with connection.cursor() as cursor:
+                            cursor.execute(
+                                "INSERT INTO rax_period_tax_reduce_request (period_id, request_id) VALUES (%s, %s)",
+                                [period.period_id, tax_reduce_request.request_id]
+                            )
+                
+                # Сериализуем ответ
+                response_serializer = TaxReduceRequestSerializer(tax_reduce_request)
+                headers = self.get_success_headers(response_serializer.data)
+                return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+                
+        except (Taxpayer.DoesNotExist, ReportStatus.DoesNotExist, 
+                TaxOfficer.DoesNotExist, ReduceType.DoesNotExist) as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
             )
-        except Taxpayer.DoesNotExist:
-            raise serializers.ValidationError("Связанный налогоплательщик не найден.")
-        except ReportStatus.DoesNotExist:
-            raise serializers.ValidationError("Начальный статус для заявлений (ID=1) не найден.")
-        except TaxOfficer.DoesNotExist:
-            raise serializers.ValidationError("Сотрудник по умолчанию (ID=1) не найден.")
-        except ReduceType.DoesNotExist:
-            raise serializers.ValidationError("Тип снижения по умолчанию (ID=1) не найден.")
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при создании заявления: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def get_or_create_period(self, start_date, end_date):
+        """Находит или создает период в таблице tax_period"""
+        try:
+            # Преобразуем строки в даты
+            if isinstance(start_date, str):
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if isinstance(end_date, str):
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            # Пытаемся найти существующий период
+            period = TaxPeriod.objects.filter(
+                start_date=start_date,
+                end_date=end_date
+            ).first()
+            
+            if period:
+                return period
+            
+            # Определяем тип периода
+            period_type_id = self.determine_period_type(start_date, end_date)
+            
+            # Создаем новый период
+            period = TaxPeriod.objects.create(
+                start_date=start_date,
+                end_date=end_date,
+                period_type_id=period_type_id
+            )
+            
+            return period
+            
+        except Exception as e:
+            # В случае ошибки создаем период с квартальным типом по умолчанию
+            period = TaxPeriod.objects.create(
+                start_date=start_date,
+                end_date=end_date,
+                period_type_id=2  # квартальный по умолчанию
+            )
+            return period
+    
+    def determine_period_type(self, start_date, end_date):
+        """Определяет тип периода на основе дат"""
+        from datetime import timedelta
+        
+        # Проверяем годовой период (с 1 января по 31 декабря)
+        if (start_date.month == 1 and start_date.day == 1 and 
+            end_date.month == 12 and end_date.day == 31):
+            return 1  # годовой
+        
+        # Проверяем квартальные периоды
+        quarters = [
+            (1, 1, 31, 3),   # Q1: 1 янв - 31 мар
+            (1, 4, 30, 6),   # Q2: 1 апр - 30 июн
+            (1, 7, 30, 9),   # Q3: 1 июл - 30 сен
+            (1, 10, 31, 12)  # Q4: 1 окт - 31 дек
+        ]
+        
+        for quarter_start_day, quarter_start_month, quarter_end_day, quarter_end_month in quarters:
+            if (start_date.month == quarter_start_month and start_date.day == quarter_start_day and
+                end_date.month == quarter_end_month and end_date.day == quarter_end_day):
+                return 2  # квартальный
+        
+        # Проверяем месячный период (разница в днях примерно 27-31 день)
+        days_diff = (end_date - start_date).days
+        if 27 <= days_diff <= 31:
+            return 3  # месячный
+        
+        # По умолчанию считаем квартальным
+        return 2
         
 
 def _make_tokens_for_inn(inn: str, user_type: str):

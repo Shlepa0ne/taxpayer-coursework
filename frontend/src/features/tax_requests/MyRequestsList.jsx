@@ -59,6 +59,23 @@ const MyRequestsList = () => {
     }).format(amount);
   };
 
+  // Функция для форматирования периода
+  const formatPeriod = (period) => {
+    if (!period) return '—';
+    const startDate = new Date(period.start_date).toLocaleDateString('ru-RU');
+    const endDate = new Date(period.end_date).toLocaleDateString('ru-RU');
+    return `${startDate} - ${endDate}`;
+  };
+
+  // Функция для получения всех периодов заявления в виде строки
+  const getPeriodsString = (request) => {
+    if (!request.periods || request.periods.length === 0) {
+      return '—';
+    }
+    
+    return request.periods.map(period => formatPeriod(period)).join(', ');
+  };
+
   if (isLoading) {
     return (
       <div className="d-flex justify-content-center py-5">
@@ -92,6 +109,8 @@ const MyRequestsList = () => {
                 <tr>
                   <th scope="col" className="ps-4">Дата подачи</th>
                   <th scope="col">Основание</th>
+                  <th scope="col">Тип снижения</th>
+                  <th scope="col">Периоды</th>
                   <th scope="col">Сумма снижения</th>
                   <th scope="col">Статус</th>
                   <th scope="col" className="pe-4">Дата решения</th>
@@ -110,9 +129,29 @@ const MyRequestsList = () => {
                            title={request.reduce_base_name}>
                         {request.reduce_base_name}
                       </div>
-                      <small className="text-muted d-block">
+                    </td>
+                    <td>
+                      <span className={`badge ${
+                        request.reduce_type_name === 'Полное освобождение' 
+                          ? 'bg-success' 
+                          : 'bg-info'
+                      }`}>
                         {request.reduce_type_name}
-                      </small>
+                      </span>
+                    </td>
+                    <td>
+                      <div 
+                        className="text-truncate" 
+                        style={{ maxWidth: '250px' }}
+                        title={getPeriodsString(request)}
+                      >
+                        {getPeriodsString(request)}
+                      </div>
+                      {request.periods && request.periods.length > 1 && (
+                        <small className="text-muted d-block">
+                          {request.periods.length} периодов
+                        </small>
+                      )}
                     </td>
                     <td>
                       <span className="fw-bold text-dark">

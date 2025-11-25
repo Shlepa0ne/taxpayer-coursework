@@ -5,7 +5,8 @@ import { createDeclaration, getTaxTypes } from '../../api/taxpayersApi';
 import Spinner from '../../components/ui/Spinner';
 
 const DeclarationForm = () => {
-  const [declarationType, setDeclarationType] = useState('3-НДФЛ');
+  // Исправлено: используем '3-NDFL' вместо '3-НДФЛ'
+  const [declarationType, setDeclarationType] = useState('3-NDFL');
   const [targetInn, setTargetInn] = useState('');
   const [taxTypeId, setTaxTypeId] = useState('');
   const [taxAmount, setTaxAmount] = useState('');

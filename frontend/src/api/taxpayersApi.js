@@ -27,7 +27,7 @@ export const getMyAccruals = async () => {
 export const createTaxReduceRequest = async (requestData) => {
     const { data } = await axiosInstance.post('/tax-reduce-requests/', requestData);
     return data;
-}
+};
 
 // Получает с сервера список всех возможных оснований для снижения налога.
 export const getReduceBases = async () => {
