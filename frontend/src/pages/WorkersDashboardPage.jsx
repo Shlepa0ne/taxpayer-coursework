@@ -31,7 +31,6 @@ const WorkersDashboardPage = () => {
     return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
-  // Получаем должность сотрудника
   const getPosition = () => {
     if (!workerData) return 'Сотрудник';
     
@@ -42,6 +41,120 @@ const WorkersDashboardPage = () => {
     };
     
     return roleMap[workerData.role_id] || 'Сотрудник';
+  };
+
+  // Функция для рендеринга меню в зависимости от роли
+  const renderMenuItems = () => {
+    if (!workerData) return null;
+
+    const roleId = workerData.role_id;
+    
+    // Базовые пункты меню для всех ролей
+    const baseMenuItems = (
+      <>
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker" 
+            className={`nav-link ${isActive('/worker') && location.pathname === '/worker' ? 'active' : ''}`}
+          >
+            <i className="bi bi-speedometer2 me-2"></i>
+            Обзор
+          </Link>
+        </li>
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker/search" 
+            className={`nav-link ${isActive('/worker/search') ? 'active' : ''}`}
+          >
+            <i className="bi bi-search me-2"></i>
+            Поиск налогоплательщика
+          </Link>
+        </li>
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker/requests" 
+            className={`nav-link ${isActive('/worker/requests') ? 'active' : ''}`}
+          >
+            <i className="bi bi-file-earmark-text me-2"></i>
+            Заявления
+          </Link>
+        </li>
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker/declarations" 
+            className={`nav-link ${isActive('/worker/declarations') ? 'active' : ''}`}
+          >
+            <i className="bi bi-file-earmark-pdf me-2"></i>
+            Декларации
+          </Link>
+        </li>
+      </>
+    );
+
+    // Дополнительные пункты для старших инспекторов и руководителей
+    const seniorMenuItems = roleId >= 2 && (
+      <>
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker/add-taxpayer" 
+            className={`nav-link ${isActive('/worker/add-taxpayer') ? 'active' : ''}`}
+          >
+            <i className="bi bi-person-badge me-2"></i>
+            Регистрация нового плательщика
+          </Link>
+        </li>
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker/inspections" 
+            className={`nav-link ${isActive('/worker/inspections') ? 'active' : ''}`}
+          >
+            <i className="bi bi-clipboard-check me-2"></i>
+            Проверки
+          </Link>
+        </li>
+      </>
+    );
+
+    // Дополнительные пункты только для руководителей
+    const managerMenuItems = roleId === 3 && (
+      <>
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker/reports" 
+            className={`nav-link ${isActive('/worker/reports') ? 'active' : ''}`}
+          >
+            <i className="bi bi-graph-up me-2"></i>
+            Отчётность
+          </Link>
+        </li>
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker/add-worker" 
+            className={`nav-link ${isActive('/worker/add-worker') ? 'active' : ''}`}
+          >
+            <i className="bi bi-person-plus me-2"></i>
+            Регистрация нового сотрудника
+          </Link>
+        </li>
+      </>
+    );
+
+    return (
+      <>
+        {baseMenuItems}
+        {seniorMenuItems}
+        {managerMenuItems}
+        <li className="nav-item">
+          <Link 
+            to="/worker/profile" 
+            className={`nav-link ${isActive('/worker/profile') ? 'active' : ''}`}
+          >
+            <i className="bi bi-person-gear me-2"></i>
+            Настройка профиля
+          </Link>
+        </li>
+      </>
+    );
   };
 
   if (loading) {
@@ -82,85 +195,7 @@ const WorkersDashboardPage = () => {
         <nav className="bg-light border-end" style={{ width: '280px' }}>
           <div className="p-3">
             <ul className="nav nav-pills flex-column">
-              <li className="nav-item mb-2">
-                <Link 
-                  to="/worker" 
-                  className={`nav-link ${isActive('/worker') && location.pathname === '/worker' ? 'active' : ''}`}
-                >
-                  <i className="bi bi-speedometer2 me-2"></i>
-                  Обзор
-                </Link>
-              </li>
-              <li className="nav-item mb-2">
-                <Link 
-                  to="/worker/search" 
-                  className={`nav-link ${isActive('/worker/search') ? 'active' : ''}`}
-                >
-                  <i className="bi bi-search me-2"></i>
-                  Поиск налогоплательщика
-                </Link>
-              </li>
-              <li className="nav-item mb-2">
-                <Link 
-                  to="/worker/requests" 
-                  className={`nav-link ${isActive('/worker/requests') ? 'active' : ''}`}
-                >
-                  <i className="bi bi-file-earmark-text me-2"></i>
-                  Заявления
-                </Link>
-              </li>
-              <li className="nav-item mb-2">
-                <Link 
-                  to="/worker/declarations" 
-                  className={`nav-link ${isActive('/worker/declarations') ? 'active' : ''}`}
-                >
-                  <i className="bi bi-file-earmark-pdf me-2"></i>
-                  Декларации
-                </Link>
-              </li>
-              <li className="nav-item mb-2">
-                <Link 
-                  to="/worker/reports" 
-                  className={`nav-link ${isActive('/worker/reports') ? 'active' : ''}`}
-                >
-                  <i className="bi bi-graph-up me-2"></i>
-                  Отчёты
-                </Link>
-              </li>
-              
-              {/* Показываем только руководителям */}
-              {workerData?.role_id === 3 && (
-                <>
-                  <li className="nav-item mb-2">
-                    <Link 
-                      to="/worker/add-worker" 
-                      className={`nav-link ${isActive('/worker/add-worker') ? 'active' : ''}`}
-                    >
-                      <i className="bi bi-person-plus me-2"></i>
-                      Добавление сотрудника
-                    </Link>
-                  </li>
-                  <li className="nav-item mb-2">
-                    <Link 
-                      to="/worker/add-taxpayer" 
-                      className={`nav-link ${isActive('/worker/add-taxpayer') ? 'active' : ''}`}
-                    >
-                      <i className="bi bi-person-badge me-2"></i>
-                      Добавление налогоплательщика
-                    </Link>
-                  </li>
-                </>
-              )}
-              
-              <li className="nav-item">
-                <Link 
-                  to="/worker/profile" 
-                  className={`nav-link ${isActive('/worker/profile') ? 'active' : ''}`}
-                >
-                  <i className="bi bi-person-gear me-2"></i>
-                  Настройка профиля
-                </Link>
-              </li>
+              {renderMenuItems()}
             </ul>
             
             <div className="mt-4 p-3 bg-white rounded border">

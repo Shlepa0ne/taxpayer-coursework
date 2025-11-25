@@ -31,12 +31,6 @@ export const getUpcomingInspectionsCount = async () => {
   return data;
 };
 
-// Поиск налогоплательщика
-export const searchTaxpayers = async (searchParams) => {
-  const { data } = await axiosInstance.get('/worker/taxpayer-search/', { params: searchParams });
-  return data;
-};
-
 // Получить список заявлений для рассмотрения
 export const getRequestsForReview = async () => {
   const { data } = await axiosInstance.get('/worker/requests-for-review/');
@@ -64,5 +58,23 @@ export const createWorker = async (workerData) => {
 // Создать нового налогоплательщика
 export const createTaxpayer = async (taxpayerData) => {
   const { data } = await axiosInstance.post('/worker/create-taxpayer/', taxpayerData);
+  return data;
+};
+
+// Поиск налогоплательщиков
+export const searchTaxpayers = async (searchParams) => {
+  const { data } = await axiosInstance.get('/worker/taxpayer-search/', { params: searchParams });
+  return data;
+};
+
+// Получить детальную информацию о налогоплательщике
+export const getTaxpayerDetail = async (taxpayerId) => {
+  const { data } = await axiosInstance.get(`/worker/taxpayer/${taxpayerId}/`);
+  return data;
+};
+
+// Получить список регионов
+export const getRegions = async () => {
+  const { data } = await axiosInstance.get('/worker/regions/');
   return data;
 };

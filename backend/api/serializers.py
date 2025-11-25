@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from django.db.models import Sum
 from django.utils import timezone
-from .models import Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, TaxableObject, ObjectOwnership, TaxPayment, TaxType, Declaration, TaxPeriod
+from django.db import connection  # ДОБАВЛЕН ИМПОРТ
+from .models import *
 
 class TaxpayerSerializer(serializers.ModelSerializer):
     class Meta:
@@ -94,7 +95,6 @@ class TaxReduceRequestListSerializer(serializers.ModelSerializer):
         """Получает периоды, связанные с заявлением"""
         try:
             # Получаем периоды через связующую таблицу rax_period_tax_reduce_request
-            from django.db import connection
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT tp.period_id, tp.start_date, tp.end_date, tp.period_type_id
@@ -418,3 +418,182 @@ class TaxPeriodSerializer(serializers.ModelSerializer):
     
     def get_period_name(self, obj):
         return obj.period_name
+    
+
+class TaxpayerSearchSerializer(serializers.ModelSerializer):
+    region_name = serializers.SerializerMethodField()
+    tax_regime_name = serializers.SerializerMethodField()
+    payer_type_name = serializers.SerializerMethodField()
+    risk_score = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Taxpayer
+        fields = [
+            'taxpayer_id', 'inn', 'fio', 'full_name', 'short_name',
+            'registration_address', 'fact_address', 'ogrn',
+            'registration_date', 'payer_type_id', 'region_key',
+            'tax_regime_id', 'region_name', 'tax_regime_name',
+            'payer_type_name', 'risk_score'
+        ]
+    
+    def get_region_name(self, obj):
+        try:
+            region = Region.objects.get(region_id=obj.region_key)
+            return region.name
+        except Region.DoesNotExist:
+            return "Не указан"
+    
+    def get_tax_regime_name(self, obj):
+        try:
+            regime = TaxRegime.objects.get(regime_id=obj.tax_regime_id)
+            return regime.name
+        except TaxRegime.DoesNotExist:
+            return "Не указан"
+    
+    def get_payer_type_name(self, obj):
+        payer_types = {
+            1: "Физическое лицо",
+            2: "Индивидуальный предприниматель", 
+            3: "Юридическое лицо"
+        }
+        return payer_types.get(obj.payer_type_id, "Неизвестно")
+    
+    def get_risk_score(self, obj):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT rating_value 
+                    FROM taxpayer_rating 
+                    WHERE taxpayer_id = %s 
+                    ORDER BY rating_date DESC, rating_id DESC 
+                    LIMIT 1
+                """, [obj.taxpayer_id])
+                result = cursor.fetchone()
+                print(f"DEBUG - Risk score query for taxpayer {obj.taxpayer_id}: {result}")  # Отладочная информация
+                if result and result[0] is not None:
+                    return int(result[0])  # Преобразуем numeric в int
+                return None
+        except Exception as e:
+            print(f"ERROR getting risk score for taxpayer {obj.taxpayer_id}: {e}")  # Отладочная информация
+            return None
+
+
+class DocumentSerializer(serializers.ModelSerializer):
+    document_type_name = serializers.CharField(source='document_type.name', read_only=True)
+    
+    class Meta:
+        model = Document
+        fields = [
+            'document_id', 'series', 'number', 'issued_by',
+            'issued_date', 'expire_date', 'additional_info',
+            'document_type_name'
+        ]
+
+class ContactDataSerializer(serializers.ModelSerializer):
+    contact_type_name = serializers.CharField(source='contact_type.name', read_only=True)
+    
+    class Meta:
+        model = ContactData
+        fields = ['contact_id', 'value', 'contact_type_name']
+
+class TaxpayerDetailSerializer(serializers.ModelSerializer):
+    region_name = serializers.SerializerMethodField()
+    tax_regime_name = serializers.SerializerMethodField()
+    payer_type_name = serializers.SerializerMethodField()
+    risk_score = serializers.SerializerMethodField()
+    documents = DocumentSerializer(many=True, read_only=True)
+    contacts = ContactDataSerializer(many=True, read_only=True)
+    inspections = serializers.SerializerMethodField()
+    taxable_objects = serializers.SerializerMethodField()
+    declarations = serializers.SerializerMethodField()
+    reduce_requests = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Taxpayer
+        fields = [
+            'taxpayer_id', 'inn', 'fio', 'full_name', 'short_name',
+            'birth_date', 'registration_address', 'fact_address',
+            'ogrn', 'registration_date', 'bank_detals', 'start_date',
+            'end_date', 'executive_list', 'payer_type_id', 'region_key',
+            'tax_regime_id', 'region_name', 'tax_regime_name', 'payer_type_name',
+            'risk_score', 'documents', 'contacts', 'inspections',
+            'taxable_objects', 'declarations', 'reduce_requests'
+        ]
+    
+    def get_region_name(self, obj):
+        try:
+            region = Region.objects.get(region_id=obj.region_key)
+            return region.name
+        except Region.DoesNotExist:
+            return "Не указан"
+    
+    def get_tax_regime_name(self, obj):
+        try:
+            regime = TaxRegime.objects.get(regime_id=obj.tax_regime_id)
+            return regime.name
+        except TaxRegime.DoesNotExist:
+            return "Не указан"
+    
+    def get_payer_type_name(self, obj):
+        payer_types = {
+            1: "Физическое лицо",
+            2: "Индивидуальный предприниматель", 
+            3: "Юридическое лицо"
+        }
+        return payer_types.get(obj.payer_type_id, "Неизвестно")
+    
+    def get_risk_score(self, obj):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT rating_value 
+                    FROM taxpayer_rating 
+                    WHERE taxpayer_id = %s 
+                    ORDER BY rating_date DESC, rating_id DESC 
+                    LIMIT 1
+                """, [obj.taxpayer_id])
+                result = cursor.fetchone()
+                print(f"DEBUG - Risk score query for taxpayer {obj.taxpayer_id}: {result}")  # Отладочная информация
+                if result and result[0] is not None:
+                    return int(result[0])  # Преобразуем numeric в int
+                return None
+        except Exception as e:
+            print(f"ERROR getting risk score for taxpayer {obj.taxpayer_id}: {e}")  # Отладочная информация
+            return None
+    
+    def get_inspections(self, obj):
+        try:
+            inspections = Inspection.objects.filter(taxpayer=obj)
+            return [
+                {
+                    'inspection_id': inspection.inspection_id,
+                    'inspection_date': inspection.inspection_date,
+                    'inspection_type_id': inspection.inspection_type_id,
+                    'inspection_reason': inspection.inspection_reason,
+                    'inspection_type_status_id': inspection.inspection_type_status_id
+                }
+                for inspection in inspections
+            ]
+        except Exception:
+            return []
+    
+    def get_taxable_objects(self, obj):
+        try:
+            ownerships = ObjectOwnership.objects.filter(taxpayer=obj).select_related('object')
+            return ObjectOwnershipSerializer(ownerships, many=True).data
+        except Exception:
+            return []
+    
+    def get_declarations(self, obj):
+        try:
+            declarations = Declaration.objects.filter(taxpayer=obj).select_related('tax_type', 'period')
+            return DeclarationListSerializer(declarations, many=True).data
+        except Exception:
+            return []
+    
+    def get_reduce_requests(self, obj):
+        try:
+            requests = TaxReduceRequest.objects.filter(taxpayer=obj).select_related('reduce_base', 'request_status', 'reduce_type')
+            return TaxReduceRequestListSerializer(requests, many=True).data
+        except Exception:
+            return []

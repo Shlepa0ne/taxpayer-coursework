@@ -1,32 +1,5 @@
 from django.urls import path
-from .views import (
-    TaxpayerListAPIView,
-    TaxpayerDetailAPIView,
-    CalculateRiskScoreAPIView,
-    MyTaxAccrualsAPIView,
-    CreateTaxReduceRequestAPIView,
-    ReduceBaseListAPIView,
-    TaxpayerLoginAPIView, 
-    WorkerLoginAPIView,
-    CustomTokenRefreshView,
-    CurrentTaxpayerAPIView,
-    LatestRiskScoreAPIView,
-    ProfileDetailAPIView, 
-    ChangePasswordAPIView,
-    MyTaxReduceRequestsAPIView,
-    MyTaxableObjectsAPIView,
-    MyTaxAccrualsWithPaymentsAPIView,
-    CreateTaxPaymentAPIView,
-    MyDeclarationsAPIView,
-    CreateDeclarationAPIView,
-    TaxTypeListAPIView,
-    RiskScoreHistoryAPIView,
-    CurrentWorkerAPIView,
-    AverageRiskScoreAPIView,
-    PendingRequestsCountAPIView,
-    DeclarationsCountAPIView,
-    UpcomingInspectionsCountAPIView
-)
+from .views import *
 
 urlpatterns = [
     # Эндпоинты для общих (административных) задач
@@ -60,4 +33,9 @@ urlpatterns = [
     path('worker/pending-requests-count/', PendingRequestsCountAPIView.as_view(), name='pending-requests-count'),
     path('worker/declarations-count/', DeclarationsCountAPIView.as_view(), name='declarations-count'),
     path('worker/upcoming-inspections-count/', UpcomingInspectionsCountAPIView.as_view(), name='upcoming-inspections-count'),
+
+    # Эндпоинты для поиска налогоплательщиков
+    path('worker/taxpayer-search/', TaxpayerSearchAPIView.as_view(), name='taxpayer-search'),
+    path('worker/taxpayer/<int:taxpayer_id>/', TaxpayerDetailAPIView.as_view(), name='taxpayer-detail'),
+    path('worker/regions/', RegionListAPIView.as_view(), name='region-list'),
 ]

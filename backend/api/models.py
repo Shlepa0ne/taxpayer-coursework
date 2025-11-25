@@ -81,7 +81,7 @@ class TaxOfficer(models.Model):
     class Meta:
         managed = False
         db_table = 'tax_officer'
-        
+
 class ReduceType(models.Model):
     reduce_type_id = models.AutoField(primary_key=True)
     reduce_type_name = models.TextField(blank=True, null=True)
@@ -242,3 +242,75 @@ class DeclarationStatus(models.Model):
     class Meta:
         managed = False
         db_table = 'declaration_status'
+
+
+class DocumentType(models.Model):
+    document_type_id = models.AutoField(primary_key=True)
+    name = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'document_type'
+
+class Document(models.Model):
+    document_id = models.AutoField(primary_key=True)
+    series = models.CharField(max_length=15, blank=True, null=True)
+    number = models.CharField(max_length=30, blank=True, null=True)
+    issued_by = models.TextField(blank=True, null=True)
+    issued_date = models.DateField(blank=True, null=True)
+    additional_info = models.TextField(blank=True, null=True)
+    expire_date = models.DateField(blank=True, null=True)
+    document_type = models.ForeignKey(DocumentType, on_delete=models.DO_NOTHING, db_column='"Ключ типа документа"')
+    taxpayer = models.ForeignKey(Taxpayer, on_delete=models.DO_NOTHING, db_column='"Ключ налогоплательщика"')
+
+    class Meta:
+        managed = False
+        db_table = 'document'
+
+class ContactType(models.Model):
+    type_id = models.AutoField(primary_key=True)
+    name = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'contact_type'
+
+class ContactData(models.Model):
+    contact_id = models.AutoField(primary_key=True)
+    value = models.TextField(blank=True, null=True)
+    contact_type = models.ForeignKey(ContactType, on_delete=models.DO_NOTHING, db_column='contact_type_id')
+    taxpayer = models.ForeignKey(Taxpayer, on_delete=models.DO_NOTHING, db_column='taxpayer_id')
+
+    class Meta:
+        managed = False
+        db_table = 'contact_data'
+
+class TaxRegime(models.Model):
+    regime_id = models.AutoField(primary_key=True)
+    name = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tax_regime'
+
+class Region(models.Model):
+    region_id = models.AutoField(primary_key=True)
+    name = models.TextField(blank=True, null=True)
+    code = models.CharField(max_length=3, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'region'
+
+class Inspection(models.Model):
+    inspection_id = models.AutoField(primary_key=True)
+    inspection_date = models.DateTimeField(blank=True, null=True)
+    taxpayer = models.ForeignKey(Taxpayer, on_delete=models.DO_NOTHING, db_column='taxpayer_id')
+    inspection_type_id = models.IntegerField()
+    inspection_reason = models.IntegerField()
+    inspection_type_status_id = models.IntegerField()
+
+    class Meta:
+        managed = False
+        db_table = 'inspection'

@@ -5,7 +5,8 @@ import {
   getAverageRiskScore, 
   getPendingRequestsCount, 
   getDeclarationsCount, 
-  getUpcomingInspectionsCount 
+  getUpcomingInspectionsCount,
+  getCurrentWorker
 } from '../api/workersApi';
 import Spinner from '../components/ui/Spinner';
 
@@ -16,6 +17,7 @@ const WorkersDashboardHome = () => {
     declarationsCount: 0,
     upcomingInspections: 0
   });
+  const [workerData, setWorkerData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -28,12 +30,14 @@ const WorkersDashboardHome = () => {
           riskScoreData,
           requestsData,
           declarationsData,
-          inspectionsData
+          inspectionsData,
+          workerData
         ] = await Promise.all([
           getAverageRiskScore(),
           getPendingRequestsCount(),
           getDeclarationsCount(),
-          getUpcomingInspectionsCount()
+          getUpcomingInspectionsCount(),
+          getCurrentWorker()
         ]);
 
         setDashboardData({
@@ -42,6 +46,8 @@ const WorkersDashboardHome = () => {
           declarationsCount: declarationsData.count,
           upcomingInspections: inspectionsData.count
         });
+        
+        setWorkerData(workerData);
 
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -68,13 +74,90 @@ const WorkersDashboardHome = () => {
     return 'Высокий риск';
   };
 
+  // Функция для получения быстрых действий в зависимости от роли
+  const getQuickActions = () => {
+    if (!workerData) return [];
+
+    const roleId = workerData.role_id;
+    
+    // Базовые действия для всех ролей
+    const baseActions = [
+      {
+        to: '/worker/search',
+        label: 'Поиск налогоплательщика',
+        icon: 'bi-search',
+        color: 'outline-primary'
+      },
+      {
+        to: '/worker/requests',
+        label: 'Рассмотреть заявления',
+        icon: 'bi-file-earmark-text',
+        color: 'outline-warning'
+      },
+      {
+        to: '/worker/declarations',
+        label: 'Проверить декларации',
+        icon: 'bi-file-earmark-pdf',
+        color: 'outline-info'
+      }
+    ];
+
+    // Действия для старших инспекторов и руководителей
+    const seniorActions = roleId >= 2 ? [
+      {
+        to: '/worker/add-taxpayer',
+        label: 'Регистрация плательщика',
+        icon: 'bi-person-badge',
+        color: 'outline-success'
+      },
+      {
+        to: '/worker/inspections',
+        label: 'Проверки',
+        icon: 'bi-clipboard-check',
+        color: 'outline-danger'
+      }
+    ] : [];
+
+    // Действия только для руководителей
+    const managerActions = roleId === 3 ? [
+      {
+        to: '/worker/reports',
+        label: 'Отчётность',
+        icon: 'bi-graph-up',
+        color: 'outline-success'
+      },
+      {
+        to: '/worker/add-worker',
+        label: 'Регистрация сотрудника',
+        icon: 'bi-person-plus',
+        color: 'outline-info'
+      }
+    ] : [];
+
+    // Комбинируем действия в зависимости от роли
+    if (roleId === 1) {
+      // Инспектор - только базовые действия
+      return baseActions;
+    } else if (roleId === 2) {
+      // Старший инспектор - базовые + дополнительные
+      return [...baseActions, ...seniorActions];
+    } else if (roleId === 3) {
+      // Руководитель - все действия
+      return [...baseActions, ...seniorActions, ...managerActions];
+    }
+
+    return baseActions;
+  };
+
   if (loading) return <Spinner />;
   if (error) return <div className="alert alert-danger">{error}</div>;
+
+  const quickActions = getQuickActions();
 
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Обзор рабочей ситуации</h2>
+        <h2>Общий обзор ситуации</h2>
         <div className="text-muted">
           <i className="bi bi-calendar me-1"></i>
           {new Date().toLocaleDateString('ru-RU', { 
@@ -218,39 +301,17 @@ const WorkersDashboardHome = () => {
               <h5 className="card-title mb-0">Быстрые действия</h5>
             </div>
             <div className="card-body">
-              <div className="row">
-                <div className="col-md-3 mb-3">
-                  <div className="d-grid">
-                    <Link to="/worker/search" className="btn btn-outline-primary">
-                      <i className="bi bi-search me-2"></i>
-                      Поиск налогоплательщика
-                    </Link>
+              <div className="row justify-content-center">
+                {quickActions.map((action, index) => (
+                  <div key={index} className="col-md-3 mb-3">
+                    <div className="d-grid">
+                      <Link to={action.to} className={`btn btn-${action.color}`}>
+                        <i className={`bi ${action.icon} me-2`}></i>
+                        {action.label}
+                      </Link>
+                    </div>
                   </div>
-                </div>
-                <div className="col-md-3 mb-3">
-                  <div className="d-grid">
-                    <Link to="/worker/requests" className="btn btn-outline-warning">
-                      <i className="bi bi-file-earmark-text me-2"></i>
-                      Рассмотреть заявления
-                    </Link>
-                  </div>
-                </div>
-                <div className="col-md-3 mb-3">
-                  <div className="d-grid">
-                    <Link to="/worker/declarations" className="btn btn-outline-info">
-                      <i className="bi bi-file-earmark-pdf me-2"></i>
-                      Проверить декларации
-                    </Link>
-                  </div>
-                </div>
-                <div className="col-md-3 mb-3">
-                  <div className="d-grid">
-                    <Link to="/worker/reports" className="btn btn-outline-success">
-                      <i className="bi bi-graph-up me-2"></i>
-                      Сформировать отчёт
-                    </Link>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>

@@ -4,31 +4,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import connection, transaction
 from django.utils import timezone
-from .models import (
-    Taxpayer, TaxAccrual, TaxReduceRequest, ReduceBase, ReportStatus, 
-    TaxOfficer, ReduceType, TaxpayerAuth, WorkerAuth, ObjectOwnership, 
-    TaxPayment, TaxType, Declaration, TaxPeriod
-)
-from .serializers import (
-    TaxpayerSerializer,
-    TaxAccrualSerializer,
-    TaxReduceRequestSerializer,
-    RiskScoreInputSerializer,
-    RiskScoreOutputSerializer,
-    ReduceBaseSerializer,
-    LoginSerializer,
-    ProfileSerializer,
-    ChangePasswordSerializer,
-    TaxReduceRequestListSerializer,
-    ObjectOwnershipSerializer,
-    TaxAccrualWithPaymentSerializer, 
-    TaxPaymentSerializer, 
-    PaymentCreateSerializer,
-    DeclarationSerializer,
-    TaxTypeSerializer,
-    DeclarationListSerializer,
-    TaxPeriodSerializer
-)
+from .models import *
+from .serializers import *
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -369,13 +346,12 @@ class LatestRiskScoreAPIView(APIView):
             taxpayer = Taxpayer.objects.get(inn=user_inn)
             
             # Получаем последний RiskScore из таблицы taxpayer_rating
-            # Используем rating_id для гарантии получения самой последней записи
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT rating_value, rating_date 
                     FROM taxpayer_rating 
                     WHERE taxpayer_id = %s 
-                    ORDER BY rating_id DESC 
+                    ORDER BY rating_date DESC, rating_id DESC 
                     LIMIT 1
                 """, [taxpayer.taxpayer_id])
                 result = cursor.fetchone()
@@ -413,7 +389,7 @@ class RiskScoreHistoryAPIView(APIView):
                     SELECT rating_id, rating_value, rating_date 
                     FROM taxpayer_rating 
                     WHERE taxpayer_id = %s 
-                    ORDER BY rating_id DESC
+                    ORDER BY rating_date DESC, rating_id DESC
                 """, [taxpayer.taxpayer_id])
                 results = cursor.fetchall()
                 
@@ -854,9 +830,13 @@ class AverageRiskScoreAPIView(APIView):
         try:
             with connection.cursor() as cursor:
                 cursor.execute("""
-                    SELECT AVG(rating_value) 
-                    FROM taxpayer_rating 
-                    WHERE rating_value IS NOT NULL
+                    SELECT AVG(latest_ratings.rating_value) 
+                    FROM (
+                        SELECT DISTINCT ON (taxpayer_id) rating_value
+                        FROM taxpayer_rating 
+                        ORDER BY taxpayer_id, rating_date DESC, rating_id DESC
+                    ) AS latest_ratings
+                    WHERE latest_ratings.rating_value IS NOT NULL
                 """)
                 result = cursor.fetchone()
                 
@@ -932,3 +912,116 @@ class UpcomingInspectionsCountAPIView(APIView):
             print(f"Error in upcoming inspections: {e}")
             # В случае любой ошибки возвращаем 0
             return Response({'count': 0})
+        
+
+# Добавьте в views.py
+
+class TaxpayerSearchAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        search_type = request.query_params.get('type', 'simple')
+        query = request.query_params.get('query', '')
+        
+        if search_type == 'simple':
+            return self.simple_search(query)
+        elif search_type == 'advanced':
+            return self.advanced_search(request.query_params)
+        else:
+            return Response({'error': 'Неверный тип поиска'}, status=400)
+
+    def simple_search(self, query):
+        if not query:
+            return Response({'error': 'Пустой запрос'}, status=400)
+        
+        try:
+            # Поиск по всем основным полям
+            taxpayers = Taxpayer.objects.filter(
+                models.Q(inn__icontains=query) |
+                models.Q(fio__icontains=query) |
+                models.Q(full_name__icontains=query) |
+                models.Q(short_name__icontains=query) |
+                models.Q(registration_address__icontains=query) |
+                models.Q(fact_address__icontains=query) |
+                models.Q(ogrn__icontains=query)
+            )[:100]  # Ограничиваем результаты
+            
+            serializer = TaxpayerSearchSerializer(taxpayers, many=True)
+            return Response({'results': serializer.data})
+            
+        except Exception as e:
+            return Response({'error': f'Ошибка поиска: {str(e)}'}, status=500)
+
+    def advanced_search(self, params):
+        try:
+            queryset = Taxpayer.objects.all()
+            
+            # Фильтрация по ИНН
+            if params.get('inn'):
+                queryset = queryset.filter(inn__icontains=params['inn'])
+            
+            # Фильтрация по ФИО (для физлиц)
+            if params.get('fio'):
+                queryset = queryset.filter(fio__icontains=params['fio'])
+            
+            # Фильтрация по названию организации
+            if params.get('org_name'):
+                queryset = queryset.filter(
+                    models.Q(full_name__icontains=params['org_name']) |
+                    models.Q(short_name__icontains=params['org_name'])
+                )
+            
+            # Фильтрация по региону
+            if params.get('region_id'):
+                queryset = queryset.filter(region_key=params['region_id'])
+            
+            # Фильтрация по типу налогоплательщика
+            if params.get('payer_type_id'):
+                queryset = queryset.filter(payer_type_id=params['payer_type_id'])
+            
+            # Фильтрация по налоговому режиму
+            if params.get('tax_regime_id'):
+                queryset = queryset.filter(tax_regime_id=params['tax_regime_id'])
+            
+            # Фильтрация по адресу
+            if params.get('address'):
+                queryset = queryset.filter(
+                    models.Q(registration_address__icontains=params['address']) |
+                    models.Q(fact_address__icontains=params['address'])
+                )
+            
+            taxpayers = queryset[:100]  # Ограничиваем результаты
+            serializer = TaxpayerSearchSerializer(taxpayers, many=True)
+            return Response({'results': serializer.data})
+            
+        except Exception as e:
+            return Response({'error': f'Ошибка расширенного поиска: {str(e)}'}, status=500)
+
+class TaxpayerDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request, taxpayer_id):
+        try:
+            taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
+            serializer = TaxpayerDetailSerializer(taxpayer)
+            return Response(serializer.data)
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=404)
+        except Exception as e:
+            return Response({'error': f'Ошибка загрузки данных: {str(e)}'}, status=500)
+
+class RegionListAPIView(generics.ListAPIView):
+    queryset = Region.objects.all()
+    serializer_class = serializers.SerializerMethodField()
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def list(self, request):
+        try:
+            regions = Region.objects.all()
+            data = [{'region_id': r.region_id, 'name': r.name, 'code': r.code} for r in regions]
+            return Response(data)
+        except Exception as e:
+            return Response({'error': f'Ошибка загрузки регионов: {str(e)}'}, status=500)
