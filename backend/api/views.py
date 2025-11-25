@@ -818,3 +818,117 @@ class TaxTypeListAPIView(generics.ListAPIView):
     serializer_class = TaxTypeSerializer
     permission_classes = [IsAuthenticated]
     authentication_classes = [InnAuthentication]
+
+class CurrentWorkerAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        user_inn = request.user.username
+        try:
+            worker_auth = WorkerAuth.objects.get(inn=user_inn)
+            
+            # Получаем связанного сотрудника через ForeignKey
+            if worker_auth.tax_officer:
+                tax_officer = worker_auth.tax_officer
+                
+                return Response({
+                    'tax_officer_id': tax_officer.tax_officer_id,
+                    'tax_officer_name': tax_officer.tax_officer_name,
+                    'unit': tax_officer.unit or 'Не указано',
+                    'role_id': tax_officer.role_id or 1
+                })
+            else:
+                return Response({
+                    'error': 'Профиль сотрудника не найден'
+                }, status=404)
+                
+        except WorkerAuth.DoesNotExist:
+            return Response({'error': 'Сотрудник не найден'}, status=404)
+
+class AverageRiskScoreAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT AVG(rating_value) 
+                    FROM taxpayer_rating 
+                    WHERE rating_value IS NOT NULL
+                """)
+                result = cursor.fetchone()
+                
+            average_score = result[0] if result and result[0] is not None else 0
+            return Response({'average_score': round(average_score, 2)})
+            
+        except Exception as e:
+            return Response({'error': f'Ошибка: {str(e)}'}, status=500)
+
+class PendingRequestsCountAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            count = TaxReduceRequest.objects.filter(
+                request_status_id=1  # Статус "на рассмотрении"
+            ).count()
+            return Response({'count': count})
+        except Exception as e:
+            return Response({'error': f'Ошибка: {str(e)}'}, status=500)
+
+class DeclarationsCountAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            # Количество деклараций за текущий год
+            from django.utils import timezone
+            current_year = timezone.now().year
+            
+            count = Declaration.objects.filter(
+                submission_date__year=current_year
+            ).count()
+            return Response({'count': count})
+        except Exception as e:
+            return Response({'error': f'Ошибка: {str(e)}'}, status=500)
+
+class UpcomingInspectionsCountAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            user_inn = request.user.username
+            worker_auth = WorkerAuth.objects.get(inn=user_inn)
+            
+            # Используем ForeignKey связь через tax_officer
+            if worker_auth.tax_officer:
+                tax_officer_id = worker_auth.tax_officer.tax_officer_id
+                
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT COUNT(*) 
+                        FROM inspection i
+                        INNER JOIN tax_officer_inspection toi ON i.inspection_id = toi.inspection_id
+                        WHERE toi.tax_officer_id = %s 
+                        AND i.inspection_date >= CURRENT_DATE
+                        AND i.inspection_type_status_id = 1  -- Статус "запланирована"
+                    """, [tax_officer_id])
+                    result = cursor.fetchone()
+                    
+                count = result[0] if result else 0
+                return Response({'count': count})
+            else:
+                # Если у сотрудника нет связанного tax_officer, возвращаем 0
+                return Response({'count': 0})
+                
+        except WorkerAuth.DoesNotExist:
+            return Response({'count': 0})
+        except Exception as e:
+            print(f"Error in upcoming inspections: {e}")
+            # В случае любой ошибки возвращаем 0
+            return Response({'count': 0})

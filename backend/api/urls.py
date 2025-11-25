@@ -20,7 +20,12 @@ from .views import (
     MyDeclarationsAPIView,
     CreateDeclarationAPIView,
     TaxTypeListAPIView,
-    RiskScoreHistoryAPIView
+    RiskScoreHistoryAPIView,
+    CurrentWorkerAPIView,
+    AverageRiskScoreAPIView,
+    PendingRequestsCountAPIView,
+    DeclarationsCountAPIView,
+    UpcomingInspectionsCountAPIView
 )
 
 urlpatterns = [
@@ -48,4 +53,11 @@ urlpatterns = [
     path('declarations/', CreateDeclarationAPIView.as_view(), name='create-declaration'),
     path('tax-types/', TaxTypeListAPIView.as_view(), name='tax-types'),
     path('risk-score-history/', RiskScoreHistoryAPIView.as_view(), name='risk-score-history'),
+    
+    # Эндпоинты для сотрудников
+    path('worker/current/', CurrentWorkerAPIView.as_view(), name='current-worker'),
+    path('worker/average-risk-score/', AverageRiskScoreAPIView.as_view(), name='average-risk-score'),
+    path('worker/pending-requests-count/', PendingRequestsCountAPIView.as_view(), name='pending-requests-count'),
+    path('worker/declarations-count/', DeclarationsCountAPIView.as_view(), name='declarations-count'),
+    path('worker/upcoming-inspections-count/', UpcomingInspectionsCountAPIView.as_view(), name='upcoming-inspections-count'),
 ]

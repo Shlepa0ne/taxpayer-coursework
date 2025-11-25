@@ -75,11 +75,13 @@ class ReportStatus(models.Model):
 class TaxOfficer(models.Model):
     tax_officer_id = models.AutoField(primary_key=True)
     tax_officer_name = models.TextField(blank=True, null=True)
+    unit = models.TextField(blank=True, null=True)  # добавьте это поле
+    role_id = models.IntegerField(blank=True, null=True)  # добавьте это поле
 
     class Meta:
         managed = False
         db_table = 'tax_officer'
-
+        
 class ReduceType(models.Model):
     reduce_type_id = models.AutoField(primary_key=True)
     reduce_type_name = models.TextField(blank=True, null=True)
@@ -115,6 +117,13 @@ class TaxpayerAuth(models.Model):
 class WorkerAuth(models.Model):
     inn = models.CharField(max_length=32, primary_key=True)
     password_hash = models.CharField(max_length=512)
+    tax_officer = models.ForeignKey(
+        TaxOfficer, 
+        on_delete=models.DO_NOTHING, 
+        blank=True, 
+        null=True,
+        db_column='tax_officer_id'  # если столбец в базе называется так
+    )
 
     class Meta:
         managed = False
