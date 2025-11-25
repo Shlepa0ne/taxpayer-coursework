@@ -98,6 +98,7 @@ class TaxReduceRequest(models.Model):
     full_description = models.TextField(blank=True, null=True)
     reduce_base = models.ForeignKey(ReduceBase, on_delete=models.DO_NOTHING)
     verdict_date = models.DateTimeField(blank=True, null=True)
+    verdict_comment = models.TextField(blank=True, null=True)  # ДОБАВЬТЕ ЭТУ СТРОКУ
     request_status = models.ForeignKey(ReportStatus, on_delete=models.DO_NOTHING)
     tax_officer = models.ForeignKey(TaxOfficer, on_delete=models.DO_NOTHING, db_column='"Ключ сотрудника"')
     reduce_type = models.ForeignKey(ReduceType, on_delete=models.DO_NOTHING, db_column='"Ключ типа снижения"')

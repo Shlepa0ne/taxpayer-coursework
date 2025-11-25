@@ -597,3 +597,92 @@ class TaxpayerDetailSerializer(serializers.ModelSerializer):
             return TaxReduceRequestListSerializer(requests, many=True).data
         except Exception:
             return []
+        
+class TaxReduceRequestDetailSerializer(serializers.ModelSerializer):
+    reduce_base_name = serializers.CharField(source='reduce_base.reduce_base_name', read_only=True)
+    request_status_name = serializers.CharField(source='request_status.report_status_name', read_only=True)
+    reduce_type_name = serializers.CharField(source='reduce_type.reduce_type_name', read_only=True)
+    tax_officer_name = serializers.CharField(source='tax_officer.tax_officer_name', read_only=True)
+    taxpayer_info = serializers.SerializerMethodField()
+    periods = serializers.SerializerMethodField()
+    tax_types = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TaxReduceRequest
+        fields = [
+            'request_id', 'send_date', 'requested_reduce_amount', 
+            'full_description', 'reduce_base_name', 'request_status_name',
+            'reduce_type_name', 'verdict_date', 'verdict_comment',
+            'tax_officer_name', 'taxpayer_info', 'periods', 'tax_types',
+            'request_status_id'
+        ]
+
+    def get_taxpayer_info(self, obj):
+        taxpayer = obj.taxpayer
+        return {
+            'taxpayer_id': taxpayer.taxpayer_id,
+            'inn': taxpayer.inn,
+            'fio': taxpayer.fio,
+            'full_name': taxpayer.full_name,
+            'short_name': taxpayer.short_name,
+            'registration_address': taxpayer.registration_address,
+            'fact_address': taxpayer.fact_address
+        }
+
+    def get_periods(self, obj):
+        """Получает периоды, связанные с заявлением"""
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT tp.period_id, tp.start_date, tp.end_date, tp.period_type_id
+                    FROM tax_period tp
+                    INNER JOIN rax_period_tax_reduce_request rptrr ON tp.period_id = rptrr.period_id
+                    WHERE rptrr.request_id = %s
+                """, [obj.request_id])
+                periods_data = cursor.fetchall()
+            
+            periods = []
+            for row in periods_data:
+                period = TaxPeriod(
+                    period_id=row[0],
+                    start_date=row[1],
+                    end_date=row[2],
+                    period_type_id=row[3]
+                )
+                periods.append({
+                    'period_id': period.period_id,
+                    'start_date': period.start_date,
+                    'end_date': period.end_date,
+                    'period_name': period.period_name
+                })
+            
+            return periods
+            
+        except Exception as e:
+            print(f"Error getting periods for request {obj.request_id}: {e}")
+            return []
+
+    def get_tax_types(self, obj):
+        """Получает типы налогов, связанные с заявлением"""
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT tt.tax_type_id, tt.tax_type_name
+                    FROM tax_type tt
+                    INNER JOIN tax_reduce_request_tax_type trrtt ON tt.tax_type_id = trrtt.tax_type_id
+                    WHERE trrtt.request_id = %s
+                """, [obj.request_id])
+                tax_types_data = cursor.fetchall()
+            
+            tax_types = []
+            for row in tax_types_data:
+                tax_types.append({
+                    'tax_type_id': row[0],
+                    'tax_type_name': row[1]
+                })
+            
+            return tax_types
+            
+        except Exception as e:
+            print(f"Error getting tax types for request {obj.request_id}: {e}")
+            return []

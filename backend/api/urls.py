@@ -38,4 +38,9 @@ urlpatterns = [
     path('worker/taxpayer-search/', TaxpayerSearchAPIView.as_view(), name='taxpayer-search'),
     path('worker/taxpayer/<int:taxpayer_id>/', TaxpayerDetailAPIView.as_view(), name='taxpayer-detail'),
     path('worker/regions/', RegionListAPIView.as_view(), name='region-list'),
+
+    # API для работы с заявлениями
+    path('worker/requests-for-review/', WorkerRequestsForReviewAPIView.as_view(), name='worker-requests-for-review'),
+    path('worker/requests/<int:pk>/', WorkerRequestDetailAPIView.as_view(), name='worker-request-detail'),
+    path('worker/requests/<int:request_id>/update/', WorkerRequestUpdateAPIView.as_view(), name='worker-request-update'),
 ]

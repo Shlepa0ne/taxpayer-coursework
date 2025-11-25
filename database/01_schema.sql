@@ -3004,7 +3004,8 @@ CREATE TABLE public.tax_reduce_request (
     request_status_id integer NOT NULL,
     taxpayer_id integer NOT NULL,
     "Ключ сотрудника" integer NOT NULL,
-    "Ключ типа снижения" integer NOT NULL
+    "Ключ типа снижения" integer NOT NULL,
+    verdict_comment text,
 )
 WITH (autovacuum_enabled='true');
 

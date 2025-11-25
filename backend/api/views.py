@@ -804,7 +804,6 @@ class CurrentWorkerAPIView(APIView):
         try:
             worker_auth = WorkerAuth.objects.get(inn=user_inn)
             
-            # Получаем связанного сотрудника через ForeignKey
             if worker_auth.tax_officer:
                 tax_officer = worker_auth.tax_officer
                 
@@ -812,7 +811,8 @@ class CurrentWorkerAPIView(APIView):
                     'tax_officer_id': tax_officer.tax_officer_id,
                     'tax_officer_name': tax_officer.tax_officer_name,
                     'unit': tax_officer.unit or 'Не указано',
-                    'role_id': tax_officer.role_id or 1
+                    'role_id': tax_officer.role_id or 1,
+                    'can_review_requests': tax_officer.role_id in [2, 3]  # Старший инспектор (2) или руководитель (3)
                 })
             else:
                 return Response({
@@ -845,6 +845,7 @@ class AverageRiskScoreAPIView(APIView):
             
         except Exception as e:
             return Response({'error': f'Ошибка: {str(e)}'}, status=500)
+
 
 class PendingRequestsCountAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1025,3 +1026,76 @@ class RegionListAPIView(generics.ListAPIView):
             return Response(data)
         except Exception as e:
             return Response({'error': f'Ошибка загрузки регионов: {str(e)}'}, status=500)
+        
+class WorkerRequestsForReviewAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    serializer_class = TaxReduceRequestDetailSerializer
+    
+    def get_queryset(self):
+        # Заявления со статусом "на рассмотрении" (1), отсортированные по дате
+        queryset = TaxReduceRequest.objects.filter(
+            request_status_id=1
+        ).select_related(
+            'taxpayer', 'reduce_base', 'request_status', 'reduce_type'
+        ).order_by('-send_date')
+        
+        return queryset
+
+class WorkerRequestDetailAPIView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    queryset = TaxReduceRequest.objects.all()
+    serializer_class = TaxReduceRequestDetailSerializer
+    
+    def get_queryset(self):
+        return TaxReduceRequest.objects.select_related(
+            'taxpayer', 'reduce_base', 'request_status', 'reduce_type'
+        )
+
+class WorkerRequestUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, request_id):
+        try:
+            tax_reduce_request = TaxReduceRequest.objects.get(request_id=request_id)
+            new_status = request.data.get('request_status_id')
+            verdict_comment = request.data.get('verdict_comment', '')
+            
+            # Разрешаем статусы: 1 (возврат на рассмотрение), 2 (одобрено), 3 (отклонено)
+            if new_status not in [1, 2, 3]:
+                return Response(
+                    {'error': 'Неверный статус. Допустимые значения: 1 (на рассмотрении), 2 (одобрено), 3 (отклонено)'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Обновляем заявление
+            tax_reduce_request.request_status_id = new_status
+            tax_reduce_request.verdict_date = timezone.now()
+            tax_reduce_request.verdict_comment = verdict_comment
+            
+            # Получаем текущего сотрудника
+            user_inn = request.user.username
+            try:
+                worker_auth = WorkerAuth.objects.get(inn=user_inn)
+                if worker_auth.tax_officer:
+                    tax_reduce_request.tax_officer = worker_auth.tax_officer
+            except WorkerAuth.DoesNotExist:
+                pass
+            
+            tax_reduce_request.save()
+            
+            serializer = TaxReduceRequestDetailSerializer(tax_reduce_request)
+            return Response(serializer.data)
+            
+        except TaxReduceRequest.DoesNotExist:
+            return Response(
+                {'error': 'Заявление не найдено'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при обновлении заявления: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

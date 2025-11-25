@@ -1,21 +1,10 @@
 // frontend/src/api/workersApi.js
 import axiosInstance from './axiosInstance';
 
-// Получить данные текущего сотрудника
-export const getCurrentWorker = async () => {
-  const { data } = await axiosInstance.get('/worker/current/');
-  return data;
-};
 
 // Получить средний RiskScore всех налогоплательщиков
 export const getAverageRiskScore = async () => {
   const { data } = await axiosInstance.get('/worker/average-risk-score/');
-  return data;
-};
-
-// Получить количество заявлений для рассмотрения
-export const getPendingRequestsCount = async () => {
-  const { data } = await axiosInstance.get('/worker/pending-requests-count/');
   return data;
 };
 
@@ -28,18 +17,6 @@ export const getDeclarationsCount = async () => {
 // Получить количество предстоящих проверок
 export const getUpcomingInspectionsCount = async () => {
   const { data } = await axiosInstance.get('/worker/upcoming-inspections-count/');
-  return data;
-};
-
-// Получить список заявлений для рассмотрения
-export const getRequestsForReview = async () => {
-  const { data } = await axiosInstance.get('/worker/requests-for-review/');
-  return data;
-};
-
-// Обновить статус заявления
-export const updateRequestStatus = async (requestId, statusData) => {
-  const { data } = await axiosInstance.patch(`/worker/requests/${requestId}/`, statusData);
   return data;
 };
 
@@ -76,5 +53,35 @@ export const getTaxpayerDetail = async (taxpayerId) => {
 // Получить список регионов
 export const getRegions = async () => {
   const { data } = await axiosInstance.get('/worker/regions/');
+  return data;
+};
+
+// Получить список заявлений для рассмотрения
+export const getRequestsForReview = async () => {
+  const { data } = await axiosInstance.get('/worker/requests-for-review/');
+  return data;
+};
+
+// Получить детальную информацию о заявлении
+export const getRequestDetail = async (requestId) => {
+  const { data } = await axiosInstance.get(`/worker/requests/${requestId}/`);
+  return data;
+};
+
+// Обновить статус заявления
+export const updateRequestStatus = async (requestId, statusData) => {
+  const { data } = await axiosInstance.patch(`/worker/requests/${requestId}/update/`, statusData);
+  return data;
+};
+
+// Получить количество заявлений для рассмотрения
+export const getPendingRequestsCount = async () => {
+  const { data } = await axiosInstance.get('/worker/pending-requests-count/');
+  return data;
+};
+
+// Получение информации о текущем сотруднике
+export const getCurrentWorker = async () => {
+  const { data } = await axiosInstance.get('/worker/current/');
   return data;
 };

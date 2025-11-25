@@ -1,9 +1,13 @@
 // frontend/src/pages/worker/WorkerTaxpayerSearch.jsx
 import React, { useState, useEffect } from 'react';
-import { searchTaxpayers, getTaxpayerDetail, getRegions } from '../../api/workersApi';
+import { useSearchParams } from 'react-router-dom';
+import { searchTaxpayers, getTaxpayerDetail, getRegions, getRequestDetail, updateRequestStatus, getCurrentWorker } from '../../api/workersApi';
 import Spinner from '../../components/ui/Spinner';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import RequestDetailModal from './components/RequestDetailModal';
 
 const WorkerTaxpayerSearch = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchType, setSearchType] = useState('simple');
   const [searchQuery, setSearchQuery] = useState('');
   const [advancedFilters, setAdvancedFilters] = useState({
@@ -21,17 +25,37 @@ const WorkerTaxpayerSearch = () => {
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [currentWorker, setCurrentWorker] = useState(null);
+  const queryClient = useQueryClient();
+
+  // Загрузка информации о текущем сотруднике
+  useEffect(() => {
+    const fetchCurrentWorker = async () => {
+      try {
+        const worker = await getCurrentWorker();
+        setCurrentWorker(worker);
+      } catch (err) {
+        console.error('Error fetching current worker:', err);
+      }
+    };
+    fetchCurrentWorker();
+  }, []);
+
+  // Обработка параметра INN из URL
+  useEffect(() => {
+    const innFromUrl = searchParams.get('inn');
+    if (innFromUrl) {
+      setSearchType('simple');
+      setSearchQuery(innFromUrl);
+      handleAutoSearch(innFromUrl);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchRegions();
   }, []);
-
-  // Сброс результатов при переключении типа поиска
-  useEffect(() => {
-    setSearchResults([]);
-    setSelectedTaxpayer(null);
-    setError('');
-  }, [searchType]);
 
   const fetchRegions = async () => {
     try {
@@ -39,6 +63,25 @@ const WorkerTaxpayerSearch = () => {
       setRegions(data);
     } catch (err) {
       console.error('Error fetching regions:', err);
+    }
+  };
+
+  const handleAutoSearch = async (inn) => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await searchTaxpayers({ type: 'simple', query: inn });
+      setSearchResults(data.results || []);
+      
+      // Если найден ровно один результат, автоматически выбираем его
+      if (data.results && data.results.length === 1) {
+        await handleTaxpayerSelect(data.results[0].taxpayer_id);
+      }
+    } catch (err) {
+      setError('Ошибка при выполнении поиска');
+      console.error('Auto search error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -61,6 +104,45 @@ const WorkerTaxpayerSearch = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Мутация для обновления статуса заявления
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ requestId, statusData }) => updateRequestStatus(requestId, statusData),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['taxpayerDetail']);
+      setShowRequestModal(false);
+      setSelectedRequest(null);
+      // Перезагружаем детали налогоплательщика
+      if (selectedTaxpayer) {
+        handleTaxpayerSelect(selectedTaxpayer.taxpayer_id);
+      }
+    },
+  });
+
+  // Функция для открытия заявления
+  const handleRequestClick = async (requestId) => {
+    try {
+      const requestDetail = await getRequestDetail(requestId);
+      setSelectedRequest(requestDetail);
+      setShowRequestModal(true);
+    } catch (err) {
+      setError('Ошибка при загрузке деталей заявления');
+    }
+  };
+
+  // Проверяем, может ли сотрудник изменять статус заявлений
+  const canChangeRequestStatus = currentWorker?.can_review_requests || false;
+
+  // Функция для обновления статуса заявления
+  const handleRequestStatusUpdate = (requestId, newStatus, comment = '') => {
+    updateStatusMutation.mutate({
+      requestId,
+      statusData: {
+        request_status_id: newStatus,
+        verdict_comment: comment
+      }
+    });
   };
 
   const handleTaxpayerSelect = async (taxpayerId) => {
@@ -384,18 +466,52 @@ const WorkerTaxpayerSearch = () => {
             {detailLoading ? (
               <Spinner />
             ) : (
-              <TaxpayerDetailView taxpayer={selectedTaxpayer} />
+              <TaxpayerDetailView 
+                taxpayer={selectedTaxpayer} 
+                onRequestClick={handleRequestClick}
+                canChangeStatus={canChangeRequestStatus}
+              />
             )}
           </div>
         </div>
+      )}
+
+      {/* Модальное окно для работы с заявлениями */}
+      {showRequestModal && selectedRequest && (
+        <RequestDetailModal
+          request={selectedRequest}
+          onClose={() => {
+            setShowRequestModal(false);
+            setSelectedRequest(null);
+          }}
+          onStatusUpdate={handleRequestStatusUpdate}
+          isUpdating={updateStatusMutation.isLoading}
+          canChangeStatus={canChangeRequestStatus}
+        />
       )}
     </div>
   );
 };
 
-// Компонент для отображения детальной информации
-const TaxpayerDetailView = ({ taxpayer }) => {
+// Компонент для отображения детальной информации (ВЫНЕСЕН ОТДЕЛЬНО)
+const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus }) => {
   const [activeTab, setActiveTab] = useState('main');
+
+  // Функция для определения, можно ли кликнуть на заявление
+  const canClickRequest = (request) => {
+    const statusId = Number(request.request_status_id);
+    // Разрешаем клик на ВСЕ заявления, независимо от статуса и прав
+    // Но для заявлений не на рассмотрении показываем сообщение
+    return true;
+  };
+
+  // Функция для определения, можно ли изменять статус заявления
+  const canChangeRequestStatus = (request) => {
+    const statusId = Number(request.request_status_id);
+    // Для заявлений на рассмотрении (статус 1) - разрешаем всем
+    // Для рассмотренных заявлений (статусы 2,3) - только старшим инспекторам
+    return statusId === 1 || canChangeStatus;
+  };
 
   const getRiskScoreColor = (score) => {
     if (score === null || score === undefined) return 'secondary';
@@ -403,6 +519,15 @@ const TaxpayerDetailView = ({ taxpayer }) => {
     if (score <= 70) return 'warning';
     return 'danger';
   };
+
+  // Функция для получения цвета статуса заявления
+    const getRequestStatusColor = (statusId) => {
+      const id = Number(statusId);
+      if (id === 1) return 'warning';    // на рассмотрении - желтый
+      if (id === 2) return 'success';    // одобрено - зеленый
+      if (id === 3) return 'danger';     // отклонено - красный
+      return 'secondary';
+    };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Не указано';
@@ -760,21 +885,23 @@ const TaxpayerDetailView = ({ taxpayer }) => {
           </div>
         )}
 
-        {/* Заявления */}
+        {/* Вкладка заявлений */}
         {activeTab === 'requests' && (
           <div>
             {taxpayer.reduce_requests && taxpayer.reduce_requests.length > 0 ? (
               <div className="row">
                 {taxpayer.reduce_requests.map(request => (
-                  <div key={request.request_id} className="col-12 mb-3">
-                    <div className="card border">
+                  <div 
+                    key={request.request_id} 
+                    className="col-12 mb-3"
+                    onClick={() => canClickRequest(request) && onRequestClick(request.request_id)}
+                    style={{ cursor: canClickRequest(request) ? 'pointer' : 'default' }}
+                  >
+                    <div className={`card border ${canClickRequest(request) ? 'hover-shadow' : ''}`}>
                       <div className="card-header bg-light">
                         <div className="d-flex justify-content-between align-items-center">
                           <h6 className="mb-0">Заявление #{request.request_id}</h6>
-                          <span className={`badge ${
-                            request.request_status_name === 'на рассмотрении' ? 'bg-warning' :
-                            request.request_status_name === 'одобрено' ? 'bg-success' : 'bg-danger'
-                          }`}>
+                          <span className={`badge bg-${getRequestStatusColor(request.request_status_id)}`}>
                             {request.request_status_name}
                           </span>
                         </div>
@@ -821,6 +948,12 @@ const TaxpayerDetailView = ({ taxpayer }) => {
                             </div>
                           </div>
                         )}
+                        <div className="mt-3">
+                          <small className="text-muted">
+                            <i className="bi bi-hand-index me-1"></i>
+                            Нажмите для подробного просмотра
+                          </small>
+                        </div>
                       </div>
                     </div>
                   </div>
