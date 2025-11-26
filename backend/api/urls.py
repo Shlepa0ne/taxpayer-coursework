@@ -78,4 +78,6 @@ urlpatterns = [
 
     path('worker/generate-inn/', GenerateINNView.as_view(), name='generate-inn'),
     path('worker/create-taxpayer/', CreateTaxpayerAPIView.as_view(), name='create-taxpayer'),
+
+    path('worker/reset-taxpayer-password/', ResetTaxpayerPasswordAPIView.as_view(), name='reset-taxpayer-password'),
 ]

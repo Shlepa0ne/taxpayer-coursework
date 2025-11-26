@@ -1,6 +1,6 @@
 // frontend/src/pages/worker/WorkerAddTaxpayer.jsx
-import React, { useState } from 'react';
-import { generateINN, createTaxpayer, getRegions, getTaxRegimes } from '../../api/workersApi';
+import React, { useState, useEffect } from 'react';
+import { generateINN, createTaxpayer, getRegions, getTaxRegimes, resetTaxpayerPassword } from '../../api/workersApi';
 import { formatDateForInput } from '../../utils/formatters';
 
 const WorkerAddTaxpayer = () => {
@@ -26,6 +26,28 @@ const WorkerAddTaxpayer = () => {
   const [error, setError] = useState('');
   const [regions, setRegions] = useState([]);
   const [taxRegimes, setTaxRegimes] = useState([]);
+
+  // Состояния для сброса пароля
+  const [resetStep, setResetStep] = useState(1); // 1 - ввод ИНН, 2 - подтверждение, 3 - результат
+  const [resetINN, setResetINN] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [countdown, setCountdown] = useState(10);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [isResetButtonDisabled, setIsResetButtonDisabled] = useState(true);
+
+  // Таймер для кнопки "Принять"
+  useEffect(() => {
+    let timer;
+    if (resetStep === 2 && countdown > 0) {
+      timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+    } else if (resetStep === 2 && countdown === 0) {
+      setIsResetButtonDisabled(false);
+    }
+    return () => clearTimeout(timer);
+  }, [resetStep, countdown]);
 
   // В useEffect для загрузки данных добавляем проверку
   React.useEffect(() => {
@@ -54,12 +76,14 @@ const WorkerAddTaxpayer = () => {
     };
     fetchData();
   }, []);
+
   const payerTypes = [
     { id: 1, label: 'Физическое лицо', description: 'Гражданин РФ' },
     { id: 2, label: 'Индивидуальный предприниматель (ИП)', description: 'Индивидуальный предприниматель' },
     { id: 3, label: 'Юридическое лицо', description: 'Организация' }
   ];
 
+  // Функции для добавления налогоплательщика (остаются без изменений)
   const handlePayerTypeSelect = (payerTypeId) => {
     setFormData(prev => ({
       ...prev,
@@ -95,7 +119,6 @@ const WorkerAddTaxpayer = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // В функции handleSubmit добавляем более детальную валидацию
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -149,11 +172,189 @@ const WorkerAddTaxpayer = () => {
       executive_list: '',
       bank_detals: '',
       tax_regime_id: 1,
-      region_key: 77
+      region_key: 3
     });
     setGeneratedPassword('');
     setStep(1);
     setError('');
+  };
+
+  // Функции для сброса пароля
+  const handleStartReset = () => {
+    if (!resetINN) {
+      setResetError('Введите ИНН налогоплательщика');
+      return;
+    }
+
+    setResetError('');
+    setResetStep(2);
+    setIsResetButtonDisabled(true);
+    setCountdown(10);
+  };
+
+  const handleConfirmReset = async () => {
+    setResetLoading(true);
+    try {
+      const result = await resetTaxpayerPassword(resetINN);
+      setNewPassword(result.new_password);
+      setResetStep(3);
+    } catch (err) {
+      setResetError(err.response?.data?.error || 'Ошибка при сбросе пароля');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleCancelReset = () => {
+    setResetStep(1);
+    setResetINN('');
+    setResetError('');
+    setNewPassword('');
+    setCountdown(10);
+    setIsResetButtonDisabled(true);
+  };
+
+  const resetPasswordForm = () => {
+    return (
+      <div className="row mt-5">
+        <div className="col-md-8 mx-auto">
+          <div className="card border-warning">
+            <div className="card-header bg-warning text-dark">
+              <h5 className="mb-0">
+                <i className="bi bi-key me-2"></i>
+                Сброс пароля налогоплательщика
+              </h5>
+            </div>
+            <div className="card-body">
+              {resetStep === 1 && (
+                <>
+                  <div className="mb-3">
+                    <label className="form-label">ИНН налогоплательщика</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={resetINN}
+                      onChange={(e) => setResetINN(e.target.value)}
+                      placeholder="Введите ИНН для сброса пароля"
+                      maxLength={12}
+                    />
+                    <div className="form-text">
+                      Введите ИНН налогоплательщика, для которого необходимо сгенерировать новый пароль
+                    </div>
+                  </div>
+                  {resetError && (
+                    <div className="alert alert-danger">
+                      <i className="bi bi-exclamation-triangle me-2"></i>
+                      {resetError}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-warning"
+                    onClick={handleStartReset}
+                    disabled={!resetINN}
+                  >
+                    <i className="bi bi-arrow-clockwise me-2"></i>
+                    Сбросить пароль
+                  </button>
+                </>
+              )}
+
+              {resetStep === 2 && (
+                <div className="text-center">
+                  <div className="mb-3">
+                    <i className="bi bi-shield-lock display-4 text-warning"></i>
+                  </div>
+                  <h5>Подтверждение сброса пароля</h5>
+                  
+                  <div className="alert alert-warning">
+                    <h6 className="alert-heading">Внимание!</h6>
+                    <p className="mb-0">
+                      Убедитесь, что налогоплательщик дал согласие на сброс пароля. 
+                      Это действие нельзя отменить.
+                    </p>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <strong>ИНН:</strong> {resetINN}
+                  </div>
+
+                  <div className="d-flex justify-content-center gap-3">
+                    <button
+                      type="button"
+                      className="btn btn-success"
+                      onClick={handleConfirmReset}
+                      disabled={isResetButtonDisabled || resetLoading}
+                    >
+                      {resetLoading ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                          Обработка...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-check-circle me-2"></i>
+                          Принять {isResetButtonDisabled && `(${countdown} сек)`}
+                        </>
+                      )}
+                    </button>
+                    
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={handleCancelReset}
+                      disabled={resetLoading}
+                    >
+                      <i className="bi bi-x-circle me-2"></i>
+                      Отменить
+                    </button>
+                  </div>
+
+                  {isResetButtonDisabled && (
+                    <div className="mt-3 text-muted small">
+                      Кнопка станет активной через {countdown} секунд
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {resetStep === 3 && (
+                <div className="text-center">
+                  <div className="mb-3">
+                    <i className="bi bi-check-circle display-4 text-success"></i>
+                  </div>
+                  <h5>Пароль успешно сброшен!</h5>
+                  
+                  <div className="alert alert-success">
+                    <h6 className="alert-heading">Новые данные для входа</h6>
+                    <div className="mb-2">
+                      <strong>ИНН:</strong> {resetINN}
+                    </div>
+                    <div>
+                      <strong>Новый пароль:</strong> 
+                      <span className="fw-bold text-primary fs-5 ms-2">{newPassword}</span>
+                    </div>
+                  </div>
+
+                  <p className="text-muted mb-4">
+                    Передайте новый пароль налогоплательщику. Рекомендуется сменить пароль при первом входе в систему.
+                  </p>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleCancelReset}
+                  >
+                    <i className="bi bi-arrow-repeat me-2"></i>
+                    Сбросить еще один пароль
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Шаг 1: Выбор типа плательщика
@@ -188,6 +389,7 @@ const WorkerAddTaxpayer = () => {
             </div>
           </div>
         </div>
+        {resetPasswordForm()}
       </div>
     );
   }
@@ -248,6 +450,7 @@ const WorkerAddTaxpayer = () => {
             </div>
           </div>
         </div>
+        {resetPasswordForm()}
       </div>
     );
   }
@@ -454,11 +657,12 @@ const WorkerAddTaxpayer = () => {
             </div>
           </div>
         </div>
+        {resetPasswordForm()}
       </div>
     );
   }
 
-  // Шаг 4: Успешное создание
+  // Шаг 4: Успешное создание (не показываем форму сброса пароля)
   if (step === 4) {
     return (
       <div className="container mt-4">

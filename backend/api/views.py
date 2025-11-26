@@ -1857,3 +1857,41 @@ class TaxRegimeListAPIView(generics.ListAPIView):
             return Response(serializer.data)
         except Exception as e:
             return Response({'error': f'Ошибка загрузки налоговых режимов: {str(e)}'}, status=500)
+        
+class ResetTaxpayerPasswordAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        inn = request.data.get('inn')
+        if not inn:
+            return Response({'error': 'ИНН обязателен'}, status=400)
+
+        try:
+            with transaction.atomic():
+                # Проверяем, существует ли налогоплательщик
+                taxpayer = Taxpayer.objects.get(inn=inn)
+                auth_record = TaxpayerAuth.objects.get(inn=inn)
+
+                # Генерируем новый пароль
+                new_password = self.generate_password()
+                auth_record.password_hash = make_password(new_password)
+                auth_record.save()
+
+                return Response({
+                    'message': 'Пароль успешно сброшен',
+                    'new_password': new_password
+                })
+
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик с таким ИНН не найден'}, status=404)
+        except TaxpayerAuth.DoesNotExist:
+            return Response({'error': 'Запись аутентификации не найдена'}, status=404)
+        except Exception as e:
+            return Response({'error': f'Ошибка при сбросе пароля: {str(e)}'}, status=500)
+
+    def generate_password(self, length=10):
+        import random
+        import string
+        characters = string.ascii_letters + string.digits
+        return ''.join(random.choice(characters) for _ in range(length))

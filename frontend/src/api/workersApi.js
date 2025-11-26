@@ -237,3 +237,9 @@ export const getRegions = async () => {
   const { data } = await axiosInstance.get('/worker/regions/');
   return data;
 };
+
+// Сброс пароля налогоплательщика
+export const resetTaxpayerPassword = async (inn) => {
+  const { data } = await axiosInstance.post('/worker/reset-taxpayer-password/', { inn });
+  return data;
+};
