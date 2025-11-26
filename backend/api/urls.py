@@ -75,4 +75,7 @@ urlpatterns = [
     path('worker/inspections/<int:inspection_id>/', WorkerInspectionDetailAPIView.as_view(), name='worker-inspection-detail'),
     path('worker/inspections/create/', WorkerInspectionCreateAPIView.as_view(), name='worker-inspection-create'),
     path('worker/inspections/<int:inspection_id>/update/', WorkerInspectionUpdateAPIView.as_view(), name='worker-inspection-update'),
+
+    path('worker/generate-inn/', GenerateINNView.as_view(), name='generate-inn'),
+    path('worker/create-taxpayer/', CreateTaxpayerAPIView.as_view(), name='create-taxpayer'),
 ]

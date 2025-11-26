@@ -1693,3 +1693,171 @@ class WorkerInspectionUpdateAPIView(APIView):
                 {'error': f'Ошибка при обновлении проверки: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+class GenerateINNView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        payer_type_id = request.data.get('payer_type_id')
+        tax_office_code = request.data.get('tax_office_code', '7700')  # код по умолчанию
+        
+        if not payer_type_id:
+            return Response({'error': 'Не указан тип плательщика'}, status=400)
+        
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT generate_unique_inn(%s, %s)", [payer_type_id, tax_office_code])
+                result = cursor.fetchone()
+                if result and result[0]:
+                    return Response({'inn': result[0]})
+                else:
+                    return Response({'error': 'Не удалось сгенерировать ИНН'}, status=500)
+                    
+        except Exception as e:
+            return Response({'error': f'Ошибка генерации ИНН: {str(e)}'}, status=500)
+
+class CreateTaxpayerAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        try:
+            with transaction.atomic():
+                # Получаем данные из запроса
+                payer_type_id = request.data.get('payer_type_id')
+                inn = request.data.get('inn')
+                
+                if not payer_type_id or not inn:
+                    return Response(
+                        {'error': 'Не указан тип плательщика или ИНН'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Проверяем уникальность ИНН
+                if Taxpayer.objects.filter(inn=inn).exists():
+                    return Response(
+                        {'error': 'Налогоплательщик с таким ИНН уже существует'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Проверяем существование региона
+                try:
+                    region = Region.objects.get(region_id=request.data.get('region_key', 3))
+                except Region.DoesNotExist:
+                    return Response(
+                        {'error': 'Указанный регион не существует'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Проверяем существование налогового режима
+                try:
+                    tax_regime = TaxRegime.objects.get(regime_id=request.data.get('tax_regime_id', 1))
+                except TaxRegime.DoesNotExist:
+                    return Response(
+                        {'error': 'Указанный налоговый режим не существует'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Базовые данные для налогоплательщика
+                taxpayer_data = {
+                    'inn': inn,
+                    'payer_type_id': payer_type_id,
+                    'creation_date': timezone.now(),
+                    'update_date': timezone.now(),
+                    'payer_status_id': 1,  # активный по умолчанию
+                    'tax_regime_id': tax_regime.regime_id,
+                    'region_key': region.region_id,
+                    'opf_id': 1,  # по умолчанию
+                    'origin_id': 1,  # по умолчанию
+                    'notes': 'Создан через личный кабинет сотрудника'
+                }
+                
+                # Добавляем специфичные поля в зависимости от типа плательщика
+                if payer_type_id == 1:  # Физлицо
+                    if not request.data.get('fio'):
+                        return Response(
+                            {'error': 'Для физического лица обязательно указать ФИО'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    taxpayer_data.update({
+                        'fio': request.data.get('fio'),
+                        'birth_date': request.data.get('birth_date') or None,
+                        'registration_address': request.data.get('registration_address') or '',
+                        'fact_address': request.data.get('fact_address') or ''
+                    })
+                elif payer_type_id in [2, 3]:  # ИП или Юрлицо
+                    if not request.data.get('full_name'):
+                        return Response(
+                            {'error': 'Для ИП и юридических лиц обязательно указать полное наименование'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    taxpayer_data.update({
+                        'full_name': request.data.get('full_name'),
+                        'short_name': request.data.get('short_name') or '',
+                        'ogrn': request.data.get('ogrn') or '',
+                        'registration_date': request.data.get('registration_date') or None,
+                        'registration_address': request.data.get('registration_address') or '',
+                        'fact_address': request.data.get('fact_address') or '',
+                        'executive_list': request.data.get('executive_list') or '',
+                        'bank_detals': request.data.get('bank_detals') or ''
+                    })
+                
+                # Создаем налогоплательщика
+                taxpayer = Taxpayer.objects.create(**taxpayer_data)
+                
+                # Генерируем случайный пароль
+                password = self.generate_password()
+                
+                # Создаем запись в taxpayer_auth
+                TaxpayerAuth.objects.create(
+                    inn=inn,
+                    password_hash=make_password(password)
+                )
+                
+                # Сериализуем ответ
+                serializer = TaxpayerSerializer(taxpayer)
+                
+                return Response({
+                    'taxpayer': serializer.data,
+                    'password': password,
+                    'message': 'Налогоплательщик успешно создан'
+                }, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при создании налогоплательщика: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def generate_password(self, length=10):
+        """Генерирует случайный пароль"""
+        import random
+        import string
+        
+        characters = string.ascii_letters + string.digits
+        return ''.join(random.choice(characters) for _ in range(length))
+    
+class RegionListAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def list(self, request):
+        try:
+            regions = Region.objects.all()
+            serializer = RegionSerializer(regions, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response({'error': f'Ошибка загрузки регионов: {str(e)}'}, status=500)
+        
+class TaxRegimeListAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def list(self, request):
+        try:
+            regimes = TaxRegime.objects.all()
+            serializer = TaxRegimeSerializer(regimes, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response({'error': f'Ошибка загрузки налоговых режимов: {str(e)}'}, status=500)

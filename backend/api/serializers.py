@@ -826,3 +826,13 @@ class InspectionDetailSerializer(serializers.Serializer):
     taxpayer = TaxpayerSerializer()
     participants = serializers.ListField()
     violations = serializers.ListField()
+
+class RegionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Region
+        fields = ['region_id', 'name', 'code']
+
+class TaxRegimeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaxRegime
+        fields = ['regime_id', 'name', 'description']

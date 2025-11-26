@@ -27,12 +27,6 @@ export const createWorker = async (workerData) => {
   return data;
 };
 
-// Создать нового налогоплательщика
-export const createTaxpayer = async (taxpayerData) => {
-  const { data } = await axiosInstance.post('/worker/create-taxpayer/', taxpayerData);
-  return data;
-};
-
 // Поиск налогоплательщиков
 export const searchTaxpayers = async (searchParams) => {
   const { data } = await axiosInstance.get('/worker/taxpayer-search/', { params: searchParams });
@@ -42,12 +36,6 @@ export const searchTaxpayers = async (searchParams) => {
 // Получить детальную информацию о налогоплательщике
 export const getTaxpayerDetail = async (taxpayerId) => {
   const { data } = await axiosInstance.get(`/worker/taxpayer/${taxpayerId}/`);
-  return data;
-};
-
-// Получить список регионов
-export const getRegions = async () => {
-  const { data } = await axiosInstance.get('/worker/regions/');
   return data;
 };
 
@@ -157,12 +145,6 @@ export const deleteTaxableObject = async (objectId) => {
   return data;
 };
 
-// Получить список налоговых режимов
-export const getTaxRegimes = async () => {
-  const { data } = await axiosInstance.get('/worker/tax-regimes/');
-  return data;
-};
-
 // Получить список статусов плательщика
 export const getPayerStatuses = async () => {
   const { data } = await axiosInstance.get('/worker/payer-statuses/');
@@ -226,5 +208,32 @@ export const updateInspection = async (inspectionId, inspectionData) => {
 // Получить список сотрудников для выбора участников проверки
 export const getAvailableOfficers = async () => {
   const { data } = await axiosInstance.get('/worker/available-officers/');
+  return data;
+};
+
+// Генерация ИНН
+export const generateINN = async (payerTypeId, taxOfficeCode = '7700') => {
+  const { data } = await axiosInstance.post('/worker/generate-inn/', {
+    payer_type_id: payerTypeId,
+    tax_office_code: taxOfficeCode
+  });
+  return data;
+};
+
+// Создание нового налогоплательщика
+export const createTaxpayer = async (taxpayerData) => {
+  const { data } = await axiosInstance.post('/worker/create-taxpayer/', taxpayerData);
+  return data;
+};
+
+// Получить список налоговых режимов
+export const getTaxRegimes = async () => {
+  const { data } = await axiosInstance.get('/worker/tax-regimes/');
+  return data;
+};
+
+// Получить список регионов
+export const getRegions = async () => {
+  const { data } = await axiosInstance.get('/worker/regions/');
   return data;
 };
