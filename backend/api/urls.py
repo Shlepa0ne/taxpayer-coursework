@@ -80,4 +80,16 @@ urlpatterns = [
     path('worker/create-taxpayer/', CreateTaxpayerAPIView.as_view(), name='create-taxpayer'),
 
     path('worker/reset-taxpayer-password/', ResetTaxpayerPasswordAPIView.as_view(), name='reset-taxpayer-password'),
+    path('worker/available-officers/', AvailableOfficersAPIView.as_view(), name='available-officers'),
+
+    path('worker/inspection-bases/', InspectionBaseListAPIView.as_view(), name='inspection-bases'),
+    path('worker/inspection-types/', InspectionTypeListAPIView.as_view(), name='inspection-types'),
+    path('worker/inspections/<int:inspection_id>/', WorkerInspectionDetailAPIView.as_view(), name='worker-inspection-detail'),
+    path('worker/violation-types/', ViolationTypeListAPIView.as_view(), name='violation-types'),
+    path('worker/tax-periods/', TaxPeriodListAPIView.as_view(), name='tax-periods'),
+    path('worker/inspections/<int:inspection_id>/violations/', InspectionViolationsListAPIView.as_view(), name='inspection-violations'),
+    path('worker/violations/', CreateViolationAPIView.as_view(), name='create-violation'),
+    path('worker/violations/<int:violation_id>/', UpdateViolationAPIView.as_view(), name='update-violation'),
+    path('worker/violations/<int:violation_id>/delete/', DeleteViolationAPIView.as_view(), name='delete-violation'),
+    path('worker/inspections/<int:inspection_id>/update-status/', UpdateInspectionStatusAPIView.as_view(), name='update-inspection-status'),
 ]

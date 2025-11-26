@@ -950,15 +950,6 @@ NEW.due_date THEN
         END IF; 
     END IF; 
  
-    -- Проверка для таблицы inspection 
-    IF TG_TABLE_NAME = 'inspection' THEN 
-        -- Дата проверки не может быть в будущем 
-        IF NEW.inspection_date > CURRENT_DATE THEN 
-            RAISE EXCEPTION 'Дата проверки не может быть в будущем: 
-%', NEW.inspection_date; 
-        END IF; 
-    END IF; 
- 
     RETURN NEW; 
 END; 
 $$;

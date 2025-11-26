@@ -151,11 +151,6 @@ export const getPayerStatuses = async () => {
   return data;
 };
 
-export const getInspectionViolations = async (inspectionId) => {
-  const { data } = await axiosInstance.get(`/worker/inspections/${inspectionId}/violations/`);
-  return data;
-};
-
 export const updateInspectionViolation = async (violationId, violationData) => {
   const { data } = await axiosInstance.patch(`/worker/violations/${violationId}/`, violationData);
   return data;
@@ -182,33 +177,6 @@ export const updateDeclarationStatus = async (declarationId, statusData) => {
     console.error('API: updateDeclarationStatus error:', error);
     throw error;
   }
-};
-
-// Проверки
-export const getWorkerInspections = async () => {
-  const { data } = await axiosInstance.get('/worker/inspections/');
-  return data;
-};
-
-export const getInspectionDetail = async (inspectionId) => {
-  const { data } = await axiosInstance.get(`/worker/inspections/${inspectionId}/`);
-  return data;
-};
-
-export const createInspection = async (inspectionData) => {
-  const { data } = await axiosInstance.post('/worker/inspections/create/', inspectionData);
-  return data;
-};
-
-export const updateInspection = async (inspectionId, inspectionData) => {
-  const { data } = await axiosInstance.patch(`/worker/inspections/${inspectionId}/update/`, inspectionData);
-  return data;
-};
-
-// Получить список сотрудников для выбора участников проверки
-export const getAvailableOfficers = async () => {
-  const { data } = await axiosInstance.get('/worker/available-officers/');
-  return data;
 };
 
 // Генерация ИНН
@@ -241,5 +209,88 @@ export const getRegions = async () => {
 // Сброс пароля налогоплательщика
 export const resetTaxpayerPassword = async (inn) => {
   const { data } = await axiosInstance.post('/worker/reset-taxpayer-password/', { inn });
+  return data;
+};
+
+// Создать новую проверку
+export const createInspection = async (inspectionData) => {
+  const { data } = await axiosInstance.post('/worker/inspections/create/', inspectionData);
+  return data;
+};
+
+// Получить список проверок сотрудника
+export const getWorkerInspections = async () => {
+  const { data } = await axiosInstance.get('/worker/inspections/');
+  return data;
+};
+
+// Обновить проверку
+export const updateInspection = async (inspectionId, inspectionData) => {
+  const { data } = await axiosInstance.patch(`/worker/inspections/${inspectionId}/update/`, inspectionData);
+  return data;
+};
+
+// Получить доступных сотрудников для проверки
+export const getAvailableOfficers = async () => {
+  const { data } = await axiosInstance.get('/worker/available-officers/');
+  return data;
+};
+
+// Получить причины проверок
+export const getInspectionBases = async () => {
+  const { data } = await axiosInstance.get('/worker/inspection-bases/');
+  return data;
+};
+
+// Получить типы проверок
+export const getInspectionTypes = async () => {
+  const { data } = await axiosInstance.get('/worker/inspection-types/');
+  return data;
+};
+
+// Получить детальную информацию о проверке
+export const getInspectionDetail = async (inspectionId) => {
+  const { data } = await axiosInstance.get(`/worker/inspections/${inspectionId}/`);
+  return data;
+};
+
+// Получить типы нарушений
+export const getViolationTypes = async () => {
+  const { data } = await axiosInstance.get('/worker/violation-types/');
+  return data;
+};
+
+// Получить налоговые периоды
+export const getTaxPeriods = async () => {
+  const { data } = await axiosInstance.get('/worker/tax-periods/');
+  return data;
+};
+
+export const updateInspectionStatus = async (inspectionId, statusData) => {
+  const { data } = await axiosInstance.patch(`/worker/inspections/${inspectionId}/update-status/`, statusData);
+  return data;
+};
+
+// Получить нарушения по проверке
+export const getInspectionViolations = async (inspectionId) => {
+  const { data } = await axiosInstance.get(`/worker/inspections/${inspectionId}/violations/`);
+  return data;
+};
+
+// Создать нарушение
+export const createViolation = async (violationData) => {
+  const { data } = await axiosInstance.post('/worker/violations/', violationData);
+  return data;
+};
+
+// Обновить нарушение
+export const updateViolation = async (violationId, violationData) => {
+  const { data } = await axiosInstance.patch(`/worker/violations/${violationId}/`, violationData);
+  return data;
+};
+
+// Удалить нарушение
+export const deleteViolation = async (violationId) => {
+  const { data } = await axiosInstance.delete(`/worker/violations/${violationId}/delete/`);
   return data;
 };

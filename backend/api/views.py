@@ -1443,13 +1443,12 @@ class WorkerDeclarationUpdateAPIView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-class WorkerInspectionsListAPIView(generics.ListAPIView):
+class WorkerInspectionsListAPIView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [InnAuthentication]
-    serializer_class = InspectionSerializer
-    
-    def get_queryset(self):
-        user_inn = self.request.user.username
+
+    def get(self, request):
+        user_inn = request.user.username
         try:
             worker_auth = WorkerAuth.objects.get(inn=user_inn)
             
@@ -1459,7 +1458,7 @@ class WorkerInspectionsListAPIView(generics.ListAPIView):
                 # Получаем проверки, в которых участвует текущий сотрудник
                 with connection.cursor() as cursor:
                     cursor.execute("""
-                        SELECT i.inspection_id, i.inspection_date, i.inspection_type_id, 
+                        SELECT DISTINCT i.inspection_id, i.inspection_date, i.inspection_type_id, 
                                i.inspection_reason, i.inspection_type_status_id,
                                t.taxpayer_id, t.inn, t.fio, t.full_name, t.short_name
                         FROM inspection i
@@ -1473,30 +1472,31 @@ class WorkerInspectionsListAPIView(generics.ListAPIView):
                 # Создаем список Inspection объектов
                 inspections = []
                 for row in results:
-                    inspection = Inspection(
-                        inspection_id=row[0],
-                        inspection_date=row[1],
-                        inspection_type_id=row[2],
-                        inspection_reason=row[3],
-                        inspection_type_status_id=row[4]
-                    )
-                    # Добавляем информацию о налогоплательщике
-                    taxpayer = Taxpayer(
-                        taxpayer_id=row[5],
-                        inn=row[6],
-                        fio=row[7],
-                        full_name=row[8],
-                        short_name=row[9]
-                    )
-                    inspection.taxpayer = taxpayer
+                    inspection = {
+                        'inspection_id': row[0],
+                        'inspection_date': row[1],
+                        'inspection_type_id': row[2],
+                        'inspection_reason': row[3],
+                        'inspection_type_status_id': row[4],
+                        'taxpayer': {
+                            'taxpayer_id': row[5],
+                            'inn': row[6],
+                            'fio': row[7],
+                            'full_name': row[8],
+                            'short_name': row[9]
+                        }
+                    }
                     inspections.append(inspection)
                 
-                return inspections
+                return Response(inspections)
             else:
-                return []
+                return Response([])
                 
         except WorkerAuth.DoesNotExist:
-            return []
+            return Response([])
+        except Exception as e:
+            print(f"Error in WorkerInspectionsListAPIView: {e}")
+            return Response({'error': str(e)}, status=500)
 
 class WorkerInspectionDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1522,18 +1522,29 @@ class WorkerInspectionDetailAPIView(APIView):
                 
                 # Получаем участников проверки
                 cursor.execute("""
-                    SELECT toi.tax_officer_id, to2.tax_officer_name, to2.unit
+                    SELECT to2.tax_officer_id, to2.tax_officer_name, to2.unit
                     FROM tax_officer_inspection toi
                     INNER JOIN tax_officer to2 ON toi.tax_officer_id = to2.tax_officer_id
                     WHERE toi.inspection_id = %s
                 """, [inspection_id])
                 participants_data = cursor.fetchall()
                 
-                # Получаем нарушения по проверке
+                # Получаем нарушения по проверке (ИСПРАВЛЕННЫЙ ЗАПРОС)
                 cursor.execute("""
-                    SELECT v.violation_id, v.violation_description, v.violation_amount,
-                           v.violation_status_id, v.penalty_amount, v.penalty_status_id
-                    FROM violation v
+                    SELECT v.violation_id, v.sum_to_pay, v.violation_type_id, v.period_id,
+                           vt.violation_name, 
+                           CASE 
+                               WHEN tp.period_type_id = 1 THEN TO_CHAR(tp.start_date, 'YYYY') || ' год'
+                               WHEN tp.period_type_id = 2 THEN 
+                                   TO_CHAR(tp.start_date, 'YYYY') || ' Q' || 
+                                   EXTRACT(QUARTER FROM tp.start_date)
+                               WHEN tp.period_type_id = 3 THEN 
+                                   TO_CHAR(tp.start_date, 'TMMonth') || ' ' || TO_CHAR(tp.start_date, 'YYYY')
+                               ELSE TO_CHAR(tp.start_date, 'DD.MM.YYYY') || ' - ' || TO_CHAR(tp.end_date, 'DD.MM.YYYY')
+                           END as period_name
+                    FROM identified_violation v
+                    INNER JOIN violation_type vt ON v.violation_type_id = vt.violation_type_id
+                    INNER JOIN tax_period tp ON v.period_id = tp.period_id
                     WHERE v.inspection_id = %s
                 """, [inspection_id])
                 violations_data = cursor.fetchall()
@@ -1564,11 +1575,11 @@ class WorkerInspectionDetailAPIView(APIView):
                 'violations': [
                     {
                         'violation_id': v[0],
-                        'violation_description': v[1],
-                        'violation_amount': float(v[2]) if v[2] else None,
-                        'violation_status_id': v[3],
-                        'penalty_amount': float(v[4]) if v[4] else None,
-                        'penalty_status_id': v[5]
+                        'sum_to_pay': float(v[1]) if v[1] else None,
+                        'violation_type_id': v[2],
+                        'period_id': v[3],
+                        'violation_type_name': v[4],
+                        'period_name': v[5]
                     } for v in violations_data
                 ]
             }
@@ -1576,6 +1587,7 @@ class WorkerInspectionDetailAPIView(APIView):
             return Response(inspection)
             
         except Exception as e:
+            print(f"Error in WorkerInspectionDetailAPIView: {e}")
             return Response({'error': f'Ошибка загрузки данных проверки: {str(e)}'}, status=500)
 
 class WorkerInspectionCreateAPIView(APIView):
@@ -1596,30 +1608,68 @@ class WorkerInspectionCreateAPIView(APIView):
             
             with transaction.atomic():
                 taxpayer_id = request.data.get('taxpayer_id')
-                inspection_date = request.data.get('inspection_date')
+                inspection_date_str = request.data.get('inspection_date')
                 inspection_type_id = request.data.get('inspection_type_id', 1)
-                inspection_reason = request.data.get('inspection_reason', '')
+                inspection_reason_id = request.data.get('inspection_reason_id', 1)
                 participants = request.data.get('participants', [])
+                
+                # Валидация обязательных полей
+                if not taxpayer_id:
+                    return Response(
+                        {'error': 'Не указан налогоплательщик'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                if not inspection_date_str:
+                    return Response(
+                        {'error': 'Не указана дата проверки'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Преобразуем строку даты в объект datetime
+                try:
+                    # Убираем 'Z' если есть и преобразуем в datetime
+                    inspection_date_str = inspection_date_str.replace('Z', '')
+                    inspection_date = datetime.fromisoformat(inspection_date_str)
+                except ValueError as e:
+                    return Response(
+                        {'error': f'Неверный формат даты: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Проверяем существование налогоплательщика
+                try:
+                    taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
+                except Taxpayer.DoesNotExist:
+                    return Response(
+                        {'error': 'Налогоплательщик не найден'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
                 
                 # Создаем проверку
                 with connection.cursor() as cursor:
                     cursor.execute("""
-                        INSERT INTO inspection (inspection_date, taxpayer_id, inspection_type_id, 
-                                              inspection_reason, inspection_type_status_id)
-                        VALUES (%s, %s, %s, %s, 1)
+                        INSERT INTO inspection (
+                            inspection_date, taxpayer_id, inspection_type_id, 
+                            inspection_reason, inspection_type_status_id
+                        ) VALUES (%s, %s, %s, %s, 1)
                         RETURNING inspection_id
-                    """, [inspection_date, taxpayer_id, inspection_type_id, inspection_reason])
+                    """, [inspection_date, taxpayer_id, inspection_type_id, inspection_reason_id])
                     inspection_id = cursor.fetchone()[0]
                 
-                # Добавляем текущего сотрудника как участника
-                with connection.cursor() as cursor:
-                    cursor.execute("""
-                        INSERT INTO tax_officer_inspection (tax_officer_id, inspection_id)
-                        VALUES (%s, %s)
-                    """, [worker_auth.tax_officer.tax_officer_id, inspection_id])
+                # Создаем множество для уникальных участников
+                unique_participants = set()
                 
-                # Добавляем других участников
+                # Добавляем текущего сотрудника как участника
+                current_officer_id = worker_auth.tax_officer.tax_officer_id
+                unique_participants.add(current_officer_id)
+                
+                # Добавляем других участников (исключая дубликаты)
                 for participant_id in participants:
+                    unique_participants.add(int(participant_id))
+                
+                # Вставляем всех уникальных участников
+                for participant_id in unique_participants:
                     with connection.cursor() as cursor:
                         cursor.execute("""
                             INSERT INTO tax_officer_inspection (tax_officer_id, inspection_id)
@@ -1895,3 +1945,204 @@ class ResetTaxpayerPasswordAPIView(APIView):
         import string
         characters = string.ascii_letters + string.digits
         return ''.join(random.choice(characters) for _ in range(length))
+    
+class AvailableOfficersAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            officers = TaxOfficer.objects.all()
+            data = [{
+                'tax_officer_id': officer.tax_officer_id,
+                'tax_officer_name': officer.tax_officer_name,
+                'unit': officer.unit
+            } for officer in officers]
+            return Response(data)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+        
+class InspectionBaseListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT inspection_base_id, inspection_base_name FROM inspection_base")
+                rows = cursor.fetchall()
+            bases = [{'id': row[0], 'name': row[1]} for row in rows]
+            return Response(bases)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class InspectionTypeListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT inspection_type_id, inspection_name_id FROM inspection_type")
+                rows = cursor.fetchall()
+            types = [{'id': row[0], 'name': row[1]} for row in rows]
+            return Response(types)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+        
+# backend/views.py
+
+class ViolationTypeListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT violation_type_id, violation_name, violation_code FROM violation_type")
+                rows = cursor.fetchall()
+            types = [{'id': row[0], 'name': row[1], 'code': row[2]} for row in rows]
+            return Response(types)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class TaxPeriodListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            periods = TaxPeriod.objects.all()
+            data = [{'period_id': p.period_id, 'period_name': p.period_name} for p in periods]
+            return Response(data)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class InspectionViolationsListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request, inspection_id):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT v.violation_id, v.sum_to_pay, v.violation_type_id, v.period_id, 
+                           vt.violation_name, tp.period_name
+                    FROM identified_violation v
+                    INNER JOIN violation_type vt ON v.violation_type_id = vt.violation_type_id
+                    INNER JOIN tax_period tp ON v.period_id = tp.period_id
+                    WHERE v.inspection_id = %s
+                """, [inspection_id])
+                rows = cursor.fetchall()
+            violations = []
+            for row in rows:
+                violations.append({
+                    'violation_id': row[0],
+                    'sum_to_pay': float(row[1]) if row[1] else 0,
+                    'violation_type_id': row[2],
+                    'period_id': row[3],
+                    'violation_type_name': row[4],
+                    'period_name': row[5]
+                })
+            return Response(violations)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class CreateViolationAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        try:
+            inspection_id = request.data.get('inspection_id')
+            violation_type_id = request.data.get('violation_type_id')
+            sum_to_pay = request.data.get('sum_to_pay')
+            period_id = request.data.get('period_id')
+
+            if not all([inspection_id, violation_type_id, period_id]):
+                return Response({'error': 'Не указаны обязательные поля'}, status=400)
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO identified_violation (inspection_id, violation_type_id, sum_to_pay, period_id)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING violation_id
+                """, [inspection_id, violation_type_id, sum_to_pay, period_id])
+                violation_id = cursor.fetchone()[0]
+
+            return Response({'violation_id': violation_id}, status=201)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class UpdateViolationAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, violation_id):
+        try:
+            violation_type_id = request.data.get('violation_type_id')
+            sum_to_pay = request.data.get('sum_to_pay')
+            period_id = request.data.get('period_id')
+
+            updates = []
+            params = []
+
+            if violation_type_id is not None:
+                updates.append("violation_type_id = %s")
+                params.append(violation_type_id)
+            if sum_to_pay is not None:
+                updates.append("sum_to_pay = %s")
+                params.append(sum_to_pay)
+            if period_id is not None:
+                updates.append("period_id = %s")
+                params.append(period_id)
+
+            if not updates:
+                return Response({'error': 'Нет данных для обновления'}, status=400)
+
+            params.append(violation_id)
+
+            with connection.cursor() as cursor:
+                cursor.execute(f"""
+                    UPDATE identified_violation 
+                    SET {', '.join(updates)}
+                    WHERE violation_id = %s
+                """, params)
+
+            return Response({'message': 'Нарушение обновлено'})
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class DeleteViolationAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def delete(self, request, violation_id):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM identified_violation WHERE violation_id = %s", [violation_id])
+            return Response({'message': 'Нарушение удалено'})
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+        
+class UpdateInspectionStatusAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, inspection_id):
+        try:
+            new_status = request.data.get('inspection_type_status_id')
+            
+            if new_status not in [1, 2, 3, 4]:
+                return Response({'error': 'Неверный статус'}, status=400)
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE inspection 
+                    SET inspection_type_status_id = %s 
+                    WHERE inspection_id = %s
+                """, [new_status, inspection_id])
+
+            return Response({'message': 'Статус проверки обновлен'})
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)

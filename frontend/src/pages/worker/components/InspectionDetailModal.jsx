@@ -159,7 +159,7 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, isUpdating, canC
                   className={`nav-link ${activeTab === 'violations' ? 'active' : ''}`}
                   onClick={() => setActiveTab('violations')}
                 >
-                  Нарушения ({violations.length})
+                  Нарушения
                 </button>
               </div>
             </nav>
