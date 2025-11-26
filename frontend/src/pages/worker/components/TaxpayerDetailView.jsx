@@ -23,13 +23,19 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
     return currentWorker?.role_id && [2, 3].includes(Number(currentWorker.role_id));
   }, [currentWorker]);
 
+  // ДОБАВИТЬ: Функции для проверки возможности клика
+  // Исправленные функции для проверки возможности клика
   const canClickDeclaration = useCallback((declaration) => {
-    return isSeniorInspector && declaration.declaration_status_id === 2; // Можно кликать только на поданные декларации
-  }, [isSeniorInspector]);
+    // Любой инспектор может открывать декларации для просмотра
+    // Но изменять статус могут только в определенных условиях (определяется в модальном окне)
+    return true; // ВСЕГДА возвращаем true для возможности просмотра
+  }, []);
 
   const canClickRequest = useCallback((request) => {
-    return canChangeStatus && request.request_status_id === 1; // Можно кликать только на заявления на рассмотрении
-  }, [canChangeStatus]);
+    // Любой инспектор может открывать заявления для просмотра
+    // Но изменять статус могут только в определенных условиях (определяется в модальном окне)
+    return true; // ВСЕГДА возвращаем true для возможности просмотра
+  }, []);
 
   const canClickInspection = useCallback((inspection) => {
     return isSeniorInspector && inspection.inspection_type_status_id === 1; // Можно кликать только на запланированные проверки
@@ -317,6 +323,7 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
             declarations={taxpayer.declarations || []} 
             onDeclarationClick={handleDeclarationClick}
             canClickDeclaration={canClickDeclaration}
+            canChangeStatus={canChangeStatus} // ДОБАВЛЕНО
           />
         )}
 
@@ -327,6 +334,7 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
             requests={taxpayer.reduce_requests || []} 
             onRequestClick={onRequestClick}
             canClickRequest={canClickRequest}
+            canChangeStatus={canChangeStatus} // ДОБАВЛЕНО: передаем проп
           />
         )}
 
@@ -374,7 +382,7 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
 
 
 // Компоненты для вкладок Декларации, Заявления и Проверки
-const DeclarationsTab = ({ declarations, onDeclarationClick, canClickDeclaration }) => {
+const DeclarationsTab = ({ declarations, onDeclarationClick, canClickDeclaration, canChangeStatus  }) => {
   if (declarations.length === 0) {
     return (
       <div className="text-center text-muted py-4">
@@ -447,14 +455,14 @@ const DeclarationsTab = ({ declarations, onDeclarationClick, canClickDeclaration
       {canClickDeclaration(declarations[0]) && (
         <div className="text-muted small mt-2">
           <i className="bi bi-hand-index me-1"></i>
-          Нажмите на декларацию для подробного просмотра и изменения статуса
+          Нажмите на декларацию для подробного просмотра{canChangeStatus && ' и изменения статуса'} {/* ИСПРАВЛЕНО */}
         </div>
       )}
     </div>
   );
 };
 
-const RequestsTab = ({ requests, onRequestClick, canClickRequest }) => {
+const RequestsTab = ({ requests, onRequestClick, canClickRequest, canChangeStatus }) => { // ДОБАВЛЕН проп canChangeStatus
   if (requests.length === 0) {
     return (
       <div className="text-center text-muted py-4">
@@ -463,7 +471,6 @@ const RequestsTab = ({ requests, onRequestClick, canClickRequest }) => {
       </div>
     );
   }
-
 
   return (
     <div className="row">
@@ -529,7 +536,7 @@ const RequestsTab = ({ requests, onRequestClick, canClickRequest }) => {
                 <div className="mt-3">
                   <small className="text-muted">
                     <i className="bi bi-hand-index me-1"></i>
-                    Нажмите для подробного просмотра
+                    Нажмите для подробного просмотра{canChangeStatus && ' и изменения статуса'} {/* ИСПРАВЛЕНО: используем переданный проп */}
                   </small>
                 </div>
               )}

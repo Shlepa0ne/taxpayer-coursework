@@ -37,8 +37,19 @@ const DeclarationDetailModal = ({ declaration, onClose, onStatusUpdate, isUpdati
 
   const actions = getAvailableActions();
 
+  // Функция для определения, нужно ли показывать вкладку "Принятие решения"
+  const shouldShowDecisionTab = () => {
+    const currentStatus = Number(declaration.declaration_status_id);
+    
+    // Показываем вкладку если:
+    // 1. Декларация подана (статус 2) - любой инспектор может принимать/отклонять
+    // 2. Декларация принята/отклонена (статус 3/4) И пользователь - старший инспектор
+    return currentStatus === 2 || (currentStatus >= 3 && isSeniorInspector);
+  };
+
   // Добавим отладочный вывод
   console.log('Available actions:', actions);
+  console.log('Should show decision tab:', shouldShowDecisionTab());
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Не указано';
@@ -168,7 +179,8 @@ const DeclarationDetailModal = ({ declaration, onClose, onStatusUpdate, isUpdati
                 >
                   Информация о декларации
                 </button>
-                {(canChangeStatus || isSeniorInspector) && (
+                {/* ИСПРАВЛЕНО: показываем вкладку если есть доступные действия */}
+                {shouldShowDecisionTab() && (
                   <button
                     className={`nav-link ${activeTab === 'decision' ? 'active' : ''}`}
                     onClick={() => setActiveTab('decision')}
