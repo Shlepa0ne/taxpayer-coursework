@@ -100,7 +100,7 @@ const WorkersDashboardPage = () => {
             className={`nav-link ${isActive('/worker/add-taxpayer') ? 'active' : ''}`}
           >
             <i className="bi bi-person-badge me-2"></i>
-            Регистрация нового плательщика
+            Работа с аккаунтами налогоплательщиков
           </Link>
         </li>
         <li className="nav-item mb-2">

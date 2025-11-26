@@ -866,12 +866,8 @@ class DeclarationsCountAPIView(APIView):
 
     def get(self, request):
         try:
-            # Количество деклараций за текущий год
-            from django.utils import timezone
-            current_year = timezone.now().year
-            
             count = Declaration.objects.filter(
-                submission_date__year=current_year
+                declaration_status_id=2  # Статус "подана"
             ).count()
             return Response({'count': count})
         except Exception as e:
