@@ -364,6 +364,13 @@ class DeclarationListSerializer(serializers.ModelSerializer):
     period_name = serializers.SerializerMethodField()
     period_start = serializers.DateField(source='period.start_date', read_only=True)
     period_end = serializers.DateField(source='period.end_date', read_only=True)
+    # ДОБАВЛЕНО: поля для информации о налогоплательщике
+    taxpayer_inn = serializers.CharField(source='taxpayer.inn', read_only=True)
+    taxpayer_fio = serializers.CharField(source='taxpayer.fio', read_only=True)
+    taxpayer_full_name = serializers.CharField(source='taxpayer.full_name', read_only=True)
+    taxpayer_short_name = serializers.CharField(source='taxpayer.short_name', read_only=True)
+    payer_type_id = serializers.IntegerField(source='taxpayer.payer_type_id', read_only=True)
+    payer_type_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Declaration
@@ -378,7 +385,14 @@ class DeclarationListSerializer(serializers.ModelSerializer):
             'period_name',
             'period_start', 
             'period_end',
-            'declaration_status_id'
+            'declaration_status_id',
+            # ДОБАВЛЕНО:
+            'taxpayer_inn',
+            'taxpayer_fio',
+            'taxpayer_full_name', 
+            'taxpayer_short_name',
+            'payer_type_id',
+            'payer_type_name'
         ]
     
     def get_declaration_type(self, obj):
@@ -403,6 +417,15 @@ class DeclarationListSerializer(serializers.ModelSerializer):
         if obj.period:
             return obj.period.period_name
         return "—"
+    
+    def get_payer_type_name(self, obj):
+        """Получает название типа плательщика"""
+        payer_types = {
+            1: "Физ. лицо",
+            2: "ИП", 
+            3: "Юр. лицо"
+        }
+        return payer_types.get(obj.taxpayer.payer_type_id, "Неизвестно")
 
 class TaxTypeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -515,7 +538,7 @@ class TaxpayerDetailSerializer(serializers.ModelSerializer):
             'birth_date', 'registration_address', 'fact_address',
             'ogrn', 'registration_date', 'bank_detals', 'start_date',
             'end_date', 'executive_list', 'payer_type_id', 'region_key',
-            'tax_regime_id', 'region_name', 'tax_regime_name', 'payer_type_name',
+            'tax_regime_id', 'payer_status_id', 'region_name', 'tax_regime_name', 'payer_type_name',  # ДОБАВЛЕНО payer_status_id
             'risk_score', 'documents', 'contacts', 'inspections',
             'taxable_objects', 'declarations', 'reduce_requests'
         ]
@@ -606,6 +629,9 @@ class TaxReduceRequestDetailSerializer(serializers.ModelSerializer):
     taxpayer_info = serializers.SerializerMethodField()
     periods = serializers.SerializerMethodField()
     tax_types = serializers.SerializerMethodField()
+    # ДОБАВЛЕНО: поля для типа плательщика
+    payer_type_id = serializers.IntegerField(source='taxpayer.payer_type_id', read_only=True)
+    payer_type_name = serializers.SerializerMethodField()
     
     class Meta:
         model = TaxReduceRequest
@@ -614,7 +640,7 @@ class TaxReduceRequestDetailSerializer(serializers.ModelSerializer):
             'full_description', 'reduce_base_name', 'request_status_name',
             'reduce_type_name', 'verdict_date', 'verdict_comment',
             'tax_officer_name', 'taxpayer_info', 'periods', 'tax_types',
-            'request_status_id'
+            'request_status_id', 'payer_type_id', 'payer_type_name'  # ДОБАВЛЕНО
         ]
 
     def get_taxpayer_info(self, obj):
@@ -626,8 +652,18 @@ class TaxReduceRequestDetailSerializer(serializers.ModelSerializer):
             'full_name': taxpayer.full_name,
             'short_name': taxpayer.short_name,
             'registration_address': taxpayer.registration_address,
-            'fact_address': taxpayer.fact_address
+            'fact_address': taxpayer.fact_address,
+            'payer_type_id': taxpayer.payer_type_id  # ДОБАВЛЕНО
         }
+
+    def get_payer_type_name(self, obj):
+        """Получает название типа плательщика"""
+        payer_types = {
+            1: "Физическое лицо",
+            2: "Индивидуальный предприниматель", 
+            3: "Юридическое лицо"
+        }
+        return payer_types.get(obj.taxpayer.payer_type_id, "Неизвестно")
 
     def get_periods(self, obj):
         """Получает периоды, связанные с заявлением"""
@@ -686,3 +722,100 @@ class TaxReduceRequestDetailSerializer(serializers.ModelSerializer):
         except Exception as e:
             print(f"Error getting tax types for request {obj.request_id}: {e}")
             return []
+        
+class TaxpayerUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Taxpayer
+        fields = [
+            'fio', 'full_name', 'short_name', 'birth_date',
+            'registration_address', 'fact_address', 'ogrn',
+            'bank_detals', 'executive_list', 'tax_regime_id', 'payer_status_id'
+        ]
+    
+    def validate(self, data):
+        taxpayer = self.instance
+        
+        # Валидация для физических лиц
+        if taxpayer.payer_type_id == 1:
+            if 'ogrn' in data and data['ogrn']:
+                raise serializers.ValidationError("Физическое лицо не может иметь ОГРН")
+            if 'full_name' in data and data['full_name']:
+                raise serializers.ValidationError("Физическое лицо не может иметь полное наименование")
+            if 'short_name' in data and data['short_name']:
+                raise serializers.ValidationError("Физическое лицо не может иметь сокращенное наименование")
+            if 'executive_list' in data and data['executive_list']:
+                raise serializers.ValidationError("Физическое лицо не может иметь руководителей")
+        
+        # Валидация для ИП и Юрлиц
+        elif taxpayer.payer_type_id in [2, 3]:
+            if 'fio' in data and data['fio']:
+                raise serializers.ValidationError("Юридическое лицо/ИП не может иметь ФИО")
+        
+        return data
+
+class DocumentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Document
+        fields = [
+            'document_type', 'series', 'number', 'issued_by',
+            'issued_date', 'expire_date', 'additional_info'
+        ]
+
+class DocumentUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Document
+        fields = [
+            'document_type', 'series', 'number', 'issued_by',
+            'issued_date', 'expire_date', 'additional_info'
+        ]
+
+class ContactCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactData
+        fields = ['contact_type', 'value']
+
+class ContactUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactData
+        fields = ['contact_type', 'value']
+
+class ObjectCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaxableObject
+        fields = [
+            'object_type', 'object_name', 'object_address',
+            'cadastral_number', 'cadastral_value', 'transport_vin',
+            'registration_plate', 'engine_power', 'real_estate_type'
+        ]
+
+class ObjectUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaxableObject
+        fields = [
+            'object_type', 'object_name', 'object_address',
+            'cadastral_number', 'cadastral_value', 'transport_vin',
+            'registration_plate', 'engine_power', 'real_estate_type'
+        ]
+
+class ObjectOwnershipCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ObjectOwnership
+        fields = ['taxpayer', 'object', 'ownership_start_date', 'ownership_end_date']
+
+class InspectionSerializer(serializers.Serializer):
+    inspection_id = serializers.IntegerField()
+    inspection_date = serializers.DateTimeField()
+    inspection_type_id = serializers.IntegerField()
+    inspection_reason = serializers.CharField()
+    inspection_type_status_id = serializers.IntegerField()
+    taxpayer = TaxpayerSerializer()
+
+class InspectionDetailSerializer(serializers.Serializer):
+    inspection_id = serializers.IntegerField()
+    inspection_date = serializers.DateTimeField()
+    inspection_type_id = serializers.IntegerField()
+    inspection_reason = serializers.CharField()
+    inspection_type_status_id = serializers.IntegerField()
+    taxpayer = TaxpayerSerializer()
+    participants = serializers.ListField()
+    violations = serializers.ListField()

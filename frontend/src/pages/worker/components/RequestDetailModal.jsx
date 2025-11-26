@@ -1,7 +1,6 @@
-// frontend/src/pages/worker/components/RequestDetailModal.jsx
 import React, { useState } from 'react';
 
-const RequestDetailModal = ({ request, onClose, onStatusUpdate, isUpdating, canChangeStatus }) => {
+const RequestDetailModal = ({ request, onClose, onStatusUpdate, isUpdating, canChangeStatus, fromSearch = false }) => {
   const [verdictComment, setVerdictComment] = useState('');
   const [activeTab, setActiveTab] = useState('request');
 
@@ -80,13 +79,16 @@ const RequestDetailModal = ({ request, onClose, onStatusUpdate, isUpdating, canC
               Рассмотрение заявления #{request.request_id}
             </h5>
             <div className="d-flex align-items-center gap-2">
-              <button 
-                onClick={openTaxpayerCard}
-                className="btn btn-outline-light btn-sm"
-              >
-                <i className="bi bi-person-badge me-1"></i>
-                Карточка налогоплательщика
-              </button>
+              {/* Показываем кнопку только если НЕ из поиска */}
+              {!fromSearch && (
+                <button 
+                  onClick={openTaxpayerCard}
+                  className="btn btn-outline-light btn-sm"
+                >
+                  <i className="bi bi-person-badge me-1"></i>
+                  Карточка налогоплательщика
+                </button>
+              )}
               <button 
                 type="button" 
                 className="btn-close btn-close-white" 

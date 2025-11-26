@@ -1099,3 +1099,597 @@ class WorkerRequestUpdateAPIView(APIView):
                 {'error': f'Ошибка при обновлении заявления: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+class UpdateTaxpayerInfoAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, taxpayer_id):
+        try:
+            taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
+            
+            # Создаем копию данных
+            update_data = request.data.copy()
+            
+            # Для физических лиц удаляем поля, которые им не положены
+            if taxpayer.payer_type_id == 1:  # Физическое лицо
+                update_data.pop('ogrn', None)
+                update_data.pop('full_name', None)
+                update_data.pop('short_name', None)
+                update_data.pop('executive_list', None)
+            
+            # Для ИП и Юрлиц удаляем ФИО
+            elif taxpayer.payer_type_id in [2, 3]:  # ИП или Юрлицо
+                update_data.pop('fio', None)
+            
+            serializer = TaxpayerUpdateSerializer(taxpayer, data=update_data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': f'Ошибка при обновлении: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class DocumentTypeListAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    queryset = DocumentType.objects.all()
+    
+    def list(self, request):
+        document_types = self.get_queryset()
+        data = [{'document_type_id': dt.document_type_id, 'name': dt.name} for dt in document_types]
+        return Response(data)
+
+class CreateDocumentAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request, taxpayer_id):
+        try:
+            taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
+            serializer = DocumentCreateSerializer(data=request.data)
+            
+            if serializer.is_valid():
+                document = serializer.save(taxpayer=taxpayer)
+                return Response(DocumentSerializer(document).data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+class DocumentDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, document_id):
+        try:
+            document = Document.objects.get(document_id=document_id)
+            serializer = DocumentUpdateSerializer(document, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response(DocumentSerializer(document).data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Document.DoesNotExist:
+            return Response({'error': 'Документ не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request, document_id):
+        try:
+            document = Document.objects.get(document_id=document_id)
+            document.delete()
+            return Response({'message': 'Документ удален'}, status=status.HTTP_204_NO_CONTENT)
+            
+        except Document.DoesNotExist:
+            return Response({'error': 'Документ не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+class ContactTypeListAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    queryset = ContactType.objects.all()
+    
+    def list(self, request):
+        contact_types = self.get_queryset()
+        data = [{'contact_type_id': ct.type_id, 'name': ct.name} for ct in contact_types]
+        return Response(data)
+
+class CreateContactAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request, taxpayer_id):
+        try:
+            taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
+            serializer = ContactCreateSerializer(data=request.data)
+            
+            if serializer.is_valid():
+                contact = serializer.save(taxpayer=taxpayer)
+                return Response(ContactDataSerializer(contact).data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+class ContactDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, contact_id):
+        try:
+            contact = ContactData.objects.get(contact_id=contact_id)
+            serializer = ContactUpdateSerializer(contact, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response(ContactDataSerializer(contact).data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except ContactData.DoesNotExist:
+            return Response({'error': 'Контакт не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request, contact_id):
+        try:
+            contact = ContactData.objects.get(contact_id=contact_id)
+            contact.delete()
+            return Response({'message': 'Контакт удален'}, status=status.HTTP_204_NO_CONTENT)
+            
+        except ContactData.DoesNotExist:
+            return Response({'error': 'Контакт не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+class ObjectTypeListAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    queryset = ObjectType.objects.all()
+    
+    def list(self, request):
+        object_types = self.get_queryset()
+        data = [{'object_type_id': ot.object_type_id, 'object_type_name': ot.object_type_name} for ot in object_types]
+        return Response(data)
+
+class CreateObjectAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request, taxpayer_id):
+        try:
+            with transaction.atomic():
+                taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
+                object_serializer = ObjectCreateSerializer(data=request.data)
+                
+                if object_serializer.is_valid():
+                    taxable_object = object_serializer.save()
+                    
+                    # Создаем запись о владении
+                    ownership_data = {
+                        'taxpayer': taxpayer.taxpayer_id,
+                        'object': taxable_object.object_id,
+                        'ownership_start_date': request.data.get('ownership_start_date'),
+                        'ownership_end_date': request.data.get('ownership_end_date') or None
+                    }
+                    
+                    ownership_serializer = ObjectOwnershipCreateSerializer(data=ownership_data)
+                    if ownership_serializer.is_valid():
+                        ownership_serializer.save()
+                        return Response(
+                            TaxableObjectSerializer(taxable_object).data, 
+                            status=status.HTTP_201_CREATED
+                        )
+                    else:
+                        taxable_object.delete()
+                        return Response(ownership_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+                return Response(object_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ObjectDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, object_id):
+        try:
+            with transaction.atomic():
+                taxable_object = TaxableObject.objects.get(object_id=object_id)
+                object_serializer = ObjectUpdateSerializer(taxable_object, data=request.data, partial=True)
+                
+                if object_serializer.is_valid():
+                    object_serializer.save()
+                    
+                    # Обновляем период владения, если указан
+                    ownership_start_date = request.data.get('ownership_start_date')
+                    ownership_end_date = request.data.get('ownership_end_date')
+                    
+                    if ownership_start_date:
+                        ownership = ObjectOwnership.objects.filter(
+                            object=taxable_object
+                        ).first()
+                        
+                        if ownership:
+                            ownership.ownership_start_date = ownership_start_date
+                            if ownership_end_date:
+                                ownership.ownership_end_date = ownership_end_date
+                            ownership.save()
+                    
+                    return Response(TaxableObjectSerializer(taxable_object).data)
+                
+                return Response(object_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+        except TaxableObject.DoesNotExist:
+            return Response({'error': 'Объект не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request, object_id):
+        try:
+            with transaction.atomic():
+                taxable_object = TaxableObject.objects.get(object_id=object_id)
+                
+                # Удаляем связь владения
+                ObjectOwnership.objects.filter(object=taxable_object).delete()
+                
+                # Удаляем сам объект
+                taxable_object.delete()
+                
+                return Response({'message': 'Объект удален'}, status=status.HTTP_204_NO_CONTENT)
+                
+        except TaxableObject.DoesNotExist:
+            return Response({'error': 'Объект не найден'}, status=status.HTTP_404_NOT_FOUND)
+        
+
+class TaxRegimeListAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def list(self, request):
+        try:
+            regimes = TaxRegime.objects.all()
+            data = [{'regime_id': r.regime_id, 'name': r.name} for r in regimes]
+            return Response(data)
+        except Exception as e:
+            return Response({'error': f'Ошибка загрузки налоговых режимов: {str(e)}'}, status=500)
+
+class PayerStatusListAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def list(self, request):
+        try:
+            # Заглушка для статусов плательщика
+            statuses = [
+                {'payer_status_id': 1, 'name': 'активный'},
+                {'payer_status_id': 2, 'name': 'неактивный'},
+                {'payer_status_id': 3, 'name': 'имеет задолженность'}
+            ]
+            return Response(statuses)
+        except Exception as e:
+            return Response({'error': f'Ошибка загрузки статусов: {str(e)}'}, status=500)
+        
+# Добавим в views.py
+
+class WorkerDeclarationsForReviewAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    serializer_class = DeclarationListSerializer
+    
+    def get_queryset(self):
+        # Получаем декларации со статусом "подана" (2), отсортированные по дате
+        queryset = Declaration.objects.filter(
+            declaration_status_id=2  # Статус "подана"
+        ).select_related(
+            'tax_type', 'taxpayer', 'period', 'who_declares'
+        ).order_by('submission_date')  # Сначала старые
+        
+        return queryset
+
+class WorkerDeclarationDetailAPIView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    queryset = Declaration.objects.all()
+    serializer_class = DeclarationListSerializer
+    
+    def get_queryset(self):
+        return Declaration.objects.select_related(
+            'tax_type', 'taxpayer', 'period', 'who_declares'
+        )
+
+class WorkerDeclarationUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, declaration_id):
+        try:
+            print(f"DEBUG: Starting update for declaration {declaration_id}")
+            print(f"DEBUG: Request data: {request.data}")
+            
+            declaration = Declaration.objects.get(declaration_id=declaration_id)
+            new_status = request.data.get('declaration_status_id')
+            
+            print(f"DEBUG: Current status: {declaration.declaration_status_id}, New status: {new_status}")
+            
+            # Разрешаем статусы: 2 (подана), 3 (принята), 4 (отклонена)
+            if new_status not in [2, 3, 4]:
+                return Response(
+                    {'error': 'Неверный статус. Допустимые значения: 2 (подана), 3 (принята), 4 (отклонена)'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Меняем статус
+            declaration.declaration_status_id = new_status
+            declaration.save()
+            
+            print(f"DEBUG: After save - status: {declaration.declaration_status_id}")
+            
+            # Принудительно обновляем объект из базы
+            declaration.refresh_from_db()
+            print(f"DEBUG: After refresh - status: {declaration.declaration_status_id}")
+            
+            # Сериализуем обновленную декларацию
+            serializer = DeclarationListSerializer(declaration)
+            print(f"DEBUG: Serializer data: {serializer.data}")
+            
+            return Response(serializer.data)
+                
+        except Declaration.DoesNotExist:
+            print(f"DEBUG: Declaration {declaration_id} not found")
+            return Response(
+                {'error': 'Декларация не найдена'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            print(f"DEBUG: Error updating declaration: {str(e)}")
+            return Response(
+                {'error': f'Ошибка при обновлении декларации: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+class WorkerInspectionsListAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    serializer_class = InspectionSerializer
+    
+    def get_queryset(self):
+        user_inn = self.request.user.username
+        try:
+            worker_auth = WorkerAuth.objects.get(inn=user_inn)
+            
+            if worker_auth.tax_officer:
+                tax_officer_id = worker_auth.tax_officer.tax_officer_id
+                
+                # Получаем проверки, в которых участвует текущий сотрудник
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT i.inspection_id, i.inspection_date, i.inspection_type_id, 
+                               i.inspection_reason, i.inspection_type_status_id,
+                               t.taxpayer_id, t.inn, t.fio, t.full_name, t.short_name
+                        FROM inspection i
+                        INNER JOIN tax_officer_inspection toi ON i.inspection_id = toi.inspection_id
+                        INNER JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
+                        WHERE toi.tax_officer_id = %s
+                        ORDER BY i.inspection_date DESC
+                    """, [tax_officer_id])
+                    results = cursor.fetchall()
+                
+                # Создаем список Inspection объектов
+                inspections = []
+                for row in results:
+                    inspection = Inspection(
+                        inspection_id=row[0],
+                        inspection_date=row[1],
+                        inspection_type_id=row[2],
+                        inspection_reason=row[3],
+                        inspection_type_status_id=row[4]
+                    )
+                    # Добавляем информацию о налогоплательщике
+                    taxpayer = Taxpayer(
+                        taxpayer_id=row[5],
+                        inn=row[6],
+                        fio=row[7],
+                        full_name=row[8],
+                        short_name=row[9]
+                    )
+                    inspection.taxpayer = taxpayer
+                    inspections.append(inspection)
+                
+                return inspections
+            else:
+                return []
+                
+        except WorkerAuth.DoesNotExist:
+            return []
+
+class WorkerInspectionDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request, inspection_id):
+        try:
+            with connection.cursor() as cursor:
+                # Получаем основную информацию о проверке
+                cursor.execute("""
+                    SELECT i.inspection_id, i.inspection_date, i.inspection_type_id, 
+                           i.inspection_reason, i.inspection_type_status_id,
+                           t.taxpayer_id, t.inn, t.fio, t.full_name, t.short_name,
+                           t.registration_address, t.fact_address
+                    FROM inspection i
+                    INNER JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
+                    WHERE i.inspection_id = %s
+                """, [inspection_id])
+                inspection_data = cursor.fetchone()
+                
+                if not inspection_data:
+                    return Response({'error': 'Проверка не найдена'}, status=404)
+                
+                # Получаем участников проверки
+                cursor.execute("""
+                    SELECT toi.tax_officer_id, to2.tax_officer_name, to2.unit
+                    FROM tax_officer_inspection toi
+                    INNER JOIN tax_officer to2 ON toi.tax_officer_id = to2.tax_officer_id
+                    WHERE toi.inspection_id = %s
+                """, [inspection_id])
+                participants_data = cursor.fetchall()
+                
+                # Получаем нарушения по проверке
+                cursor.execute("""
+                    SELECT v.violation_id, v.violation_description, v.violation_amount,
+                           v.violation_status_id, v.penalty_amount, v.penalty_status_id
+                    FROM violation v
+                    WHERE v.inspection_id = %s
+                """, [inspection_id])
+                violations_data = cursor.fetchall()
+            
+            # Формируем ответ
+            inspection = {
+                'inspection_id': inspection_data[0],
+                'inspection_date': inspection_data[1],
+                'inspection_type_id': inspection_data[2],
+                'inspection_reason': inspection_data[3],
+                'inspection_type_status_id': inspection_data[4],
+                'taxpayer': {
+                    'taxpayer_id': inspection_data[5],
+                    'inn': inspection_data[6],
+                    'fio': inspection_data[7],
+                    'full_name': inspection_data[8],
+                    'short_name': inspection_data[9],
+                    'registration_address': inspection_data[10],
+                    'fact_address': inspection_data[11]
+                },
+                'participants': [
+                    {
+                        'tax_officer_id': p[0],
+                        'tax_officer_name': p[1],
+                        'unit': p[2]
+                    } for p in participants_data
+                ],
+                'violations': [
+                    {
+                        'violation_id': v[0],
+                        'violation_description': v[1],
+                        'violation_amount': float(v[2]) if v[2] else None,
+                        'violation_status_id': v[3],
+                        'penalty_amount': float(v[4]) if v[4] else None,
+                        'penalty_status_id': v[5]
+                    } for v in violations_data
+                ]
+            }
+            
+            return Response(inspection)
+            
+        except Exception as e:
+            return Response({'error': f'Ошибка загрузки данных проверки: {str(e)}'}, status=500)
+
+class WorkerInspectionCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        try:
+            user_inn = request.user.username
+            worker_auth = WorkerAuth.objects.get(inn=user_inn)
+            
+            # Проверяем, является ли сотрудник старшим инспектором или выше
+            if not worker_auth.tax_officer or worker_auth.tax_officer.role_id < 2:
+                return Response(
+                    {'error': 'Недостаточно прав для создания проверки'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            with transaction.atomic():
+                taxpayer_id = request.data.get('taxpayer_id')
+                inspection_date = request.data.get('inspection_date')
+                inspection_type_id = request.data.get('inspection_type_id', 1)
+                inspection_reason = request.data.get('inspection_reason', '')
+                participants = request.data.get('participants', [])
+                
+                # Создаем проверку
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO inspection (inspection_date, taxpayer_id, inspection_type_id, 
+                                              inspection_reason, inspection_type_status_id)
+                        VALUES (%s, %s, %s, %s, 1)
+                        RETURNING inspection_id
+                    """, [inspection_date, taxpayer_id, inspection_type_id, inspection_reason])
+                    inspection_id = cursor.fetchone()[0]
+                
+                # Добавляем текущего сотрудника как участника
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO tax_officer_inspection (tax_officer_id, inspection_id)
+                        VALUES (%s, %s)
+                    """, [worker_auth.tax_officer.tax_officer_id, inspection_id])
+                
+                # Добавляем других участников
+                for participant_id in participants:
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            INSERT INTO tax_officer_inspection (tax_officer_id, inspection_id)
+                            VALUES (%s, %s)
+                        """, [participant_id, inspection_id])
+                
+                return Response({
+                    'message': 'Проверка успешно создана',
+                    'inspection_id': inspection_id
+                }, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при создании проверки: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class WorkerInspectionUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, inspection_id):
+        try:
+            user_inn = request.user.username
+            worker_auth = WorkerAuth.objects.get(inn=user_inn)
+            
+            # Проверяем, является ли сотрудник старшим инспектором или выше
+            if not worker_auth.tax_officer or worker_auth.tax_officer.role_id < 2:
+                return Response(
+                    {'error': 'Недостаточно прав для редактирования проверки'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            with connection.cursor() as cursor:
+                # Обновляем основную информацию о проверке
+                update_fields = []
+                params = []
+                
+                if 'inspection_date' in request.data:
+                    update_fields.append("inspection_date = %s")
+                    params.append(request.data['inspection_date'])
+                
+                if 'inspection_type_id' in request.data:
+                    update_fields.append("inspection_type_id = %s")
+                    params.append(request.data['inspection_type_id'])
+                
+                if 'inspection_reason' in request.data:
+                    update_fields.append("inspection_reason = %s")
+                    params.append(request.data['inspection_reason'])
+                
+                if 'inspection_type_status_id' in request.data:
+                    update_fields.append("inspection_type_status_id = %s")
+                    params.append(request.data['inspection_type_status_id'])
+                
+                if update_fields:
+                    params.append(inspection_id)
+                    cursor.execute(f"""
+                        UPDATE inspection 
+                        SET {', '.join(update_fields)}
+                        WHERE inspection_id = %s
+                    """, params)
+            
+            return Response({'message': 'Проверка успешно обновлена'})
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при обновлении проверки: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

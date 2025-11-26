@@ -16,7 +16,6 @@ import WorkersDashboardPage from './pages/WorkersDashboardPage';
 import WorkersDashboardHome from './pages/WorkersDashboardHome';
 import ProfilePage from './pages/ProfilePage';
 
-// Компоненты для сотрудника (заглушки - нужно будет реализовать)
 import WorkerTaxpayerSearch from './pages/worker/WorkerTaxpayerSearch';
 import WorkerRequests from './pages/worker/WorkerRequests';
 import WorkerDeclarations from './pages/worker/WorkerDeclarations';
@@ -24,6 +23,7 @@ import WorkerReports from './pages/worker/WorkerReports';
 import WorkerAddWorker from './pages/worker/WorkerAddWorker';
 import WorkerAddTaxpayer from './pages/worker/WorkerAddTaxpayer';
 import WorkerProfile from './pages/worker/WorkerProfile';
+import WorkerInspections from './pages/worker/WorkerInspections';
 
 // Компонент-обертка для защиты роутов
 function ProtectedRoute({ children }) {
@@ -84,6 +84,7 @@ function App() {
         <Route path="add-worker" element={<WorkerAddWorker />} />
         <Route path="add-taxpayer" element={<WorkerAddTaxpayer />} />
         <Route path="profile" element={<WorkerProfile />} />
+        <Route path="inspections" element={<WorkerInspections />} />
       </Route>
       
       {/* Личный кабинет налогоплательщика */}

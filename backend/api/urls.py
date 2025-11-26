@@ -43,4 +43,36 @@ urlpatterns = [
     path('worker/requests-for-review/', WorkerRequestsForReviewAPIView.as_view(), name='worker-requests-for-review'),
     path('worker/requests/<int:pk>/', WorkerRequestDetailAPIView.as_view(), name='worker-request-detail'),
     path('worker/requests/<int:request_id>/update/', WorkerRequestUpdateAPIView.as_view(), name='worker-request-update'),
+
+    # Редактирование данных налогоплательщика
+    path('worker/taxpayer/<int:taxpayer_id>/update/', UpdateTaxpayerInfoAPIView.as_view(), name='update-taxpayer-info'),
+    
+    # Документы
+    path('worker/document-types/', DocumentTypeListAPIView.as_view(), name='document-types'),
+    path('worker/taxpayer/<int:taxpayer_id>/documents/', CreateDocumentAPIView.as_view(), name='create-document'),
+    path('worker/documents/<int:document_id>/', DocumentDetailAPIView.as_view(), name='document-detail'),
+    
+    # Контакты
+    path('worker/contact-types/', ContactTypeListAPIView.as_view(), name='contact-types'),
+    path('worker/taxpayer/<int:taxpayer_id>/contacts/', CreateContactAPIView.as_view(), name='create-contact'),
+    path('worker/contacts/<int:contact_id>/', ContactDetailAPIView.as_view(), name='contact-detail'),
+    
+    # Объекты
+    path('worker/object-types/', ObjectTypeListAPIView.as_view(), name='object-types'),
+    path('worker/taxpayer/<int:taxpayer_id>/objects/', CreateObjectAPIView.as_view(), name='create-object'),
+    path('worker/objects/<int:object_id>/', ObjectDetailAPIView.as_view(), name='object-detail'),
+
+    path('worker/tax-regimes/', TaxRegimeListAPIView.as_view(), name='tax-regimes'),
+    path('worker/payer-statuses/', PayerStatusListAPIView.as_view(), name='payer-statuses'),
+
+    # Декларации для сотрудников
+    path('worker/declarations-for-review/', WorkerDeclarationsForReviewAPIView.as_view(), name='worker-declarations-for-review'),
+    path('worker/declarations/<int:declaration_id>/', WorkerDeclarationDetailAPIView.as_view(), name='worker-declaration-detail'),
+    path('worker/declarations/<int:declaration_id>/update/', WorkerDeclarationUpdateAPIView.as_view(), name='worker-declaration-update'),
+
+    # Проверки для сотрудников
+    path('worker/inspections/', WorkerInspectionsListAPIView.as_view(), name='worker-inspections-list'),
+    path('worker/inspections/<int:inspection_id>/', WorkerInspectionDetailAPIView.as_view(), name='worker-inspection-detail'),
+    path('worker/inspections/create/', WorkerInspectionCreateAPIView.as_view(), name='worker-inspection-create'),
+    path('worker/inspections/<int:inspection_id>/update/', WorkerInspectionUpdateAPIView.as_view(), name='worker-inspection-update'),
 ]

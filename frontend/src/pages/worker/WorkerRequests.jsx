@@ -100,6 +100,23 @@ const WorkerRequests = () => {
     }
   };
 
+  // Функция для получения типа плательщика
+  const getPayerType = (payerTypeId) => {
+    const payerTypes = {
+      1: 'Физическое лицо',
+      2: 'Индивидуальный предприниматель',
+      3: 'Юридическое лицо'
+    };
+    return payerTypes[payerTypeId] || 'Неизвестно';
+  };
+
+  // Функция для получения отображаемого имени налогоплательщика
+  const getTaxpayerDisplayName = (taxpayerInfo) => {
+    if (!taxpayerInfo) return 'Не указано';
+    
+    return taxpayerInfo.fio || taxpayerInfo.full_name || taxpayerInfo.short_name || 'Не указано';
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -117,7 +134,7 @@ const WorkerRequests = () => {
         <div className="card">
           <div className="card-header">
             <h5 className="card-title mb-0">
-              Заявления для рассмотрения ({requests.length})
+              Заявления для рассмотрения
             </h5>
           </div>
           <div className="card-body p-0">
@@ -125,8 +142,8 @@ const WorkerRequests = () => {
               <table className="table table-hover mb-0">
                 <thead className="table-light">
                   <tr>
-                    <th>ID</th>
                     <th>Налогоплательщик</th>
+                    <th>Тип плательщика</th>
                     <th>Дата подачи</th>
                     <th>Сумма</th>
                     <th>Статус</th>
@@ -140,13 +157,15 @@ const WorkerRequests = () => {
                       style={{ cursor: 'pointer' }}
                       onClick={() => handleRequestClick(request)}
                     >
-                      <td>#{request.request_id}</td>
                       <td>
                         <div>
-                          <strong>{request.taxpayer_info?.fio || request.taxpayer_info?.full_name || 'Не указано'}</strong>
+                          <strong>{getTaxpayerDisplayName(request.taxpayer_info)}</strong>
                           <br />
                           <small className="text-muted">ИНН: {request.taxpayer_info?.inn}</small>
                         </div>
+                      </td>
+                      <td>
+                        {request.payer_type_name || getPayerType(request.taxpayer_info?.payer_type_id)}
                       </td>
                       <td>
                         {new Date(request.send_date).toLocaleDateString('ru-RU')}
