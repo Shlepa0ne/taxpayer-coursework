@@ -83,18 +83,22 @@ class TaxReduceRequestListSerializer(serializers.ModelSerializer):
     verdict_date = serializers.DateTimeField(read_only=True)
     periods = serializers.SerializerMethodField()
     
+    # ДОБАВЛЕНО: поля для ID статуса и типа
+    request_status_id = serializers.IntegerField(source='request_status.report_status_id', read_only=True)
+    reduce_type_id = serializers.IntegerField(source='reduce_type.reduce_type_id', read_only=True)
+    
     class Meta:
         model = TaxReduceRequest
         fields = [
             'request_id', 'send_date', 'requested_reduce_amount', 
             'full_description', 'reduce_base_name', 'request_status_name',
-            'reduce_type_name', 'verdict_date', 'periods'
+            'reduce_type_name', 'verdict_date', 'periods',
+            'request_status_id', 'reduce_type_id'  # ДОБАВЛЕНО
         ]
 
     def get_periods(self, obj):
         """Получает периоды, связанные с заявлением"""
         try:
-            # Получаем периоды через связующую таблицу rax_period_tax_reduce_request
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT tp.period_id, tp.start_date, tp.end_date, tp.period_type_id
@@ -492,12 +496,11 @@ class TaxpayerSearchSerializer(serializers.ModelSerializer):
                     LIMIT 1
                 """, [obj.taxpayer_id])
                 result = cursor.fetchone()
-                print(f"DEBUG - Risk score query for taxpayer {obj.taxpayer_id}: {result}")  # Отладочная информация
                 if result and result[0] is not None:
-                    return int(result[0])  # Преобразуем numeric в int
+                    return int(result[0])
                 return None
         except Exception as e:
-            print(f"ERROR getting risk score for taxpayer {obj.taxpayer_id}: {e}")  # Отладочная информация
+            print(f"ERROR getting risk score for taxpayer {obj.taxpayer_id}: {e}")
             return None
 
 
@@ -629,9 +632,12 @@ class TaxReduceRequestDetailSerializer(serializers.ModelSerializer):
     taxpayer_info = serializers.SerializerMethodField()
     periods = serializers.SerializerMethodField()
     tax_types = serializers.SerializerMethodField()
-    # ДОБАВЛЕНО: поля для типа плательщика
     payer_type_id = serializers.IntegerField(source='taxpayer.payer_type_id', read_only=True)
     payer_type_name = serializers.SerializerMethodField()
+    
+    # ДОБАВЛЕНО: поля для ID статуса и типа
+    request_status_id = serializers.IntegerField(source='request_status.report_status_id', read_only=True)
+    reduce_type_id = serializers.IntegerField(source='reduce_type.reduce_type_id', read_only=True)
     
     class Meta:
         model = TaxReduceRequest
@@ -640,7 +646,8 @@ class TaxReduceRequestDetailSerializer(serializers.ModelSerializer):
             'full_description', 'reduce_base_name', 'request_status_name',
             'reduce_type_name', 'verdict_date', 'verdict_comment',
             'tax_officer_name', 'taxpayer_info', 'periods', 'tax_types',
-            'request_status_id', 'payer_type_id', 'payer_type_name'  # ДОБАВЛЕНО
+            'request_status_id', 'payer_type_id', 'payer_type_name',
+            'reduce_type_id'  # ДОБАВЛЕНО
         ]
 
     def get_taxpayer_info(self, obj):
@@ -653,7 +660,7 @@ class TaxReduceRequestDetailSerializer(serializers.ModelSerializer):
             'short_name': taxpayer.short_name,
             'registration_address': taxpayer.registration_address,
             'fact_address': taxpayer.fact_address,
-            'payer_type_id': taxpayer.payer_type_id  # ДОБАВЛЕНО
+            'payer_type_id': taxpayer.payer_type_id
         }
 
     def get_payer_type_name(self, obj):
