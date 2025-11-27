@@ -6,17 +6,25 @@ import EditMainInfoForm from './EditMainInfoForm';
 import DocumentsSection from './DocumentsSection';
 import ContactsSection from './ContactsSection';
 import ObjectsSection from './ObjectsSection';
-import DeclarationDetailModal from './DeclarationDetailModal';
-import InspectionDetailModal from './InspectionDetailModal';
 
-const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpayerUpdate, currentWorker }) => {
+const TaxpayerDetailView = ({ 
+  taxpayer, 
+  onRequestClick, 
+  onDeclarationClick, // ДОБАВЛЕНО: проп для клика по декларациям
+  onInspectionClick, // ДОБАВЛЕНО: проп для клика по проверкам
+  canChangeStatus, 
+  onTaxpayerUpdate, 
+  currentWorker 
+}) => {
   const [activeTab, setActiveTab] = useState('main');
   const [editingMainInfo, setEditingMainInfo] = useState(false);
   const [editedMainInfo, setEditedMainInfo] = useState({});
-  const [selectedDeclaration, setSelectedDeclaration] = useState(null);
-  const [selectedInspection, setSelectedInspection] = useState(null);
-  const [showDeclarationModal, setShowDeclarationModal] = useState(false);
-  const [showInspectionModal, setShowInspectionModal] = useState(false);
+
+  // УДАЛЕНО: состояния для модальных окон
+  // const [selectedDeclaration, setSelectedDeclaration] = useState(null);
+  // const [selectedInspection, setSelectedInspection] = useState(null);
+  // const [showDeclarationModal, setShowDeclarationModal] = useState(false);
+  // const [showInspectionModal, setShowInspectionModal] = useState(false);
 
   // Используем useCallback для стабильных функций
   const isSeniorInspector = React.useMemo(() => {
@@ -105,7 +113,6 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
         return;
       }
 
-
       const result = await updateTaxpayerInfo(taxpayer.taxpayer_id, dataToSend);
       console.log('Save successful:', result);
       
@@ -140,51 +147,23 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
     });
   }, [taxpayer]);
 
-  // Остальные обработчики также обернем в useCallback
-  const handleDeclarationClick = useCallback(async (declarationId) => {
-    const declaration = taxpayer.declarations.find(d => d.declaration_id === declarationId);
-    if (declaration) {
-      setSelectedDeclaration(declaration);
-      setShowDeclarationModal(true);
+  // ИЗМЕНЕНО: упрощенный обработчик клика по декларации
+  const handleDeclarationClick = useCallback((declarationId) => {
+    if (onDeclarationClick) {
+      onDeclarationClick(declarationId);
     }
-  }, [taxpayer.declarations]);
+  }, [onDeclarationClick]);
 
-  const handleDeclarationStatusUpdate = useCallback(async (declarationId, newStatus, comment = '') => {
-    try {
-      const updatedDeclaration = await updateDeclarationStatus(declarationId, {
-        declaration_status_id: newStatus
-      });
-      
-      if (onTaxpayerUpdate) {
-        onTaxpayerUpdate(taxpayer.taxpayer_id);
-      }
-    } catch (error) {
-      console.error('TaxpayerDetailView: Update failed', error);
-      alert('Ошибка при обновлении статуса декларации: ' + error.message);
+  // ИЗМЕНЕНО: упрощенный обработчик клика по проверке
+  const handleInspectionClick = useCallback((inspectionId) => {
+    if (onInspectionClick) {
+      onInspectionClick(inspectionId);
     }
-  }, [taxpayer.taxpayer_id, onTaxpayerUpdate]);
+  }, [onInspectionClick]);
 
-  // Обработчики для проверок
-  const handleInspectionClick = async (inspectionId) => {
-    const inspection = taxpayer.inspections.find(i => i.inspection_id === inspectionId);
-    if (inspection) {
-      setSelectedInspection(inspection);
-      setShowInspectionModal(true);
-    }
-  };
-
-  const handleInspectionUpdate = async (inspectionId, inspectionData) => {
-    try {
-      // Здесь должен быть API вызов для обновления проверки
-      console.log(`Updating inspection ${inspectionId}:`, inspectionData);
-      // После успешного обновления закрываем модалку и обновляем данные
-      setShowInspectionModal(false);
-      setSelectedInspection(null);
-      onTaxpayerUpdate(taxpayer.taxpayer_id);
-    } catch (error) {
-      console.error('Ошибка при обновлении проверки:', error);
-    }
-  };
+  // УДАЛЕНО: обработчики обновления статусов (теперь в родительском компоненте)
+  // const handleDeclarationStatusUpdate = useCallback(...)
+  // const handleInspectionUpdate = async (...)
 
   return (
     <div>
@@ -208,7 +187,6 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
           </div>
         </div>
       </div>
-
 
       {/* Навигация по вкладкам */}
       <nav className="mb-4">
@@ -326,10 +304,9 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
             declarations={taxpayer.declarations || []} 
             onDeclarationClick={handleDeclarationClick}
             canClickDeclaration={canClickDeclaration}
-            canChangeStatus={canChangeStatus} // ДОБАВЛЕНО
+            canChangeStatus={canChangeStatus}
           />
         )}
-
 
         {/* Вкладка заявлений */}
         {activeTab === 'requests' && (
@@ -337,7 +314,7 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
             requests={taxpayer.reduce_requests || []} 
             onRequestClick={onRequestClick}
             canClickRequest={canClickRequest}
-            canChangeStatus={canChangeStatus} // ДОБАВЛЕНО: передаем проп
+            canChangeStatus={canChangeStatus}
           />
         )}
 
@@ -347,44 +324,15 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
             inspections={taxpayer.inspections || []} 
             onInspectionClick={handleInspectionClick}
             canClickInspection={canClickInspection}
-            isSeniorInspector={isSeniorInspector} // ДОБАВЛЕНО: передаем информацию о правах
+            isSeniorInspector={isSeniorInspector}
           />
         )}
       </div>
 
-      {/* Модальные окна */}
-      {showDeclarationModal && selectedDeclaration && (
-        <DeclarationDetailModal
-          declaration={selectedDeclaration}
-          onClose={() => {
-            setShowDeclarationModal(false);
-            setSelectedDeclaration(null);
-          }}
-          onStatusUpdate={handleDeclarationStatusUpdate}
-          isUpdating={false}
-          canChangeStatus={canChangeStatus}
-          isSeniorInspector={isSeniorInspector}
-        />
-      )}
-
-      {showInspectionModal && selectedInspection && (
-        <InspectionDetailModal
-          inspection={selectedInspection}
-          onClose={() => {
-            setShowInspectionModal(false);
-            setSelectedInspection(null);
-          }}
-          onUpdate={handleInspectionUpdate}
-          isUpdating={false}
-          canChangeStatus={canChangeStatus}
-          isSeniorOrManager={isSeniorInspector} // ДОБАВЛЕНО: передаем права
-        />
-      )}
+      {/* УДАЛЕНО: модальные окна (перенесены в родительский компонент) */}
     </div>
   );
 };
-
-
 
 // Компоненты для вкладок Декларации, Заявления и Проверки
 const DeclarationsTab = ({ declarations, onDeclarationClick, canClickDeclaration, canChangeStatus  }) => {
@@ -414,7 +362,6 @@ const DeclarationsTab = ({ declarations, onDeclarationClick, canClickDeclaration
     };
     return statusMap[statusId] || 'неизвестно';
   };
-
 
   return (
     <div className="table-responsive">
@@ -460,7 +407,7 @@ const DeclarationsTab = ({ declarations, onDeclarationClick, canClickDeclaration
       {canClickDeclaration(declarations[0]) && (
         <div className="text-muted small mt-2">
           <i className="bi bi-hand-index me-1"></i>
-          Нажмите на декларацию для подробного просмотра{canChangeStatus && ' и изменения статуса'} {/* ИСПРАВЛЕНО */}
+          Нажмите на декларацию для подробного просмотра{canChangeStatus && ' и изменения статуса'}
         </div>
       )}
     </div>
@@ -618,7 +565,6 @@ const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection, is
     };
     return statuses[statusId] || 'Неизвестно';
   };
-
 
   const getInspectionStatusColor = (statusId) => {
     if (statusId === 1) return 'warning';
