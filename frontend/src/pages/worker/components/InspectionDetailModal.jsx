@@ -1,405 +1,386 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { 
+  getInspectionDetail,
+  getViolationTypes,
+  getTaxPeriods,
+  getInspectionViolations,
+  createViolation,
+  updateViolation,
+  deleteViolation
+} from '../../../api/workersApi';
+import Spinner from '../../../components/ui/Spinner';
 
-const InspectionDetailModal = ({ inspection, onClose, onUpdate, isUpdating, canChangeStatus, fromSearch = false }) => {
-  const [activeTab, setActiveTab] = useState('inspection');
-  const [formData, setFormData] = useState({
-    inspection_date: inspection.inspection_date || '',
-    inspection_type_id: inspection.inspection_type_id || '',
-    inspection_reason: inspection.inspection_reason || '',
-    inspection_type_status_id: inspection.inspection_type_status_id || ''
+// Компонент модального окна деталей проверки
+const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, inspectionBases, inspectionTypes }) => {
+  const [inspectionDetail, setInspectionDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [violations, setViolations] = useState([]);
+  const [violationTypes, setViolationTypes] = useState([]);
+  const [taxPeriods, setTaxPeriods] = useState([]);
+  const [showAddViolation, setShowAddViolation] = useState(false);
+  const [editingViolation, setEditingViolation] = useState(null);
+  const [violationForm, setViolationForm] = useState({
+    violation_type_id: '',
+    sum_to_pay: '',
+    period_id: ''
   });
-  const [violations, setViolations] = useState(inspection.violations || []);
 
-  const isFutureInspection = () => {
-    if (!inspection.inspection_date) return false;
-    const inspectionDate = new Date(inspection.inspection_date);
-    const today = new Date();
-    return inspectionDate > today;
-  };
+  useEffect(() => {
+    fetchInspectionDetail();
+  }, [inspection]);
 
-  const canEdit = canChangeStatus && isFutureInspection();
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Не указано';
+  const fetchInspectionDetail = async () => {
     try {
-      return new Date(dateString).toLocaleDateString('ru-RU');
-    } catch {
-      return 'Не указано';
-    }
-  };
-
-  const formatCurrency = (amount) => {
-    if (!amount) return '—';
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB'
-    }).format(amount);
-  };
-
-  const getInspectionTypeText = (typeId) => {
-    const types = {
-      1: 'Выездная',
-      2: 'Камеральная',
-      3: 'Документарная'
-    };
-    return types[typeId] || 'Неизвестно';
-  };
-
-  const getInspectionReasonText = (reasonId) => {
-    const reasons = {
-      1: 'Плановая проверка',
-      2: 'Жалоба', 
-      3: 'Анализ рисков'
-    };
-    return reasons[reasonId] || 'Неизвестно';
-  };
-
-  const getInspectionStatusText = (statusId) => {
-    const statuses = {
-      1: 'Запланирована',
-      2: 'Завершена',
-      3: 'Отменена'
-    };
-    return statuses[statusId] || 'Неизвестно';
-  };
-
-  const getInspectionStatusColor = (statusId) => {
-    if (statusId === 1) return 'warning';
-    if (statusId === 2) return 'success';
-    if (statusId === 3) return 'secondary';
-    return 'secondary';
-  };
-
-  const handleFormChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSave = async () => {
-    try {
-      await onUpdate(inspection.inspection_id, formData);
+      const data = await getInspectionDetail(inspection.inspection_id);
+      setInspectionDetail(data);
+      
+      // Загружаем нарушения, типы нарушений и периоды
+      if (isInspectionCompleted(data)) {
+        await fetchViolations();
+        await fetchViolationTypes();
+        await fetchTaxPeriods();
+      }
     } catch (error) {
-      console.error('Ошибка сохранения проверки:', error);
+      console.error('Error fetching inspection detail:', error);
+      alert('Ошибка загрузки деталей проверки');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const addViolation = () => {
-    const newViolation = {
-      violation_id: Date.now(), // временный ID
-      sum_to_pay: '',
-      violation_type_id: '',
-      period_id: ''
+  const fetchViolations = async () => {
+    try {
+      const data = await getInspectionViolations(inspection.inspection_id);
+      setViolations(data);
+    } catch (error) {
+      console.error('Error fetching violations:', error);
+    }
+  };
+
+  const fetchViolationTypes = async () => {
+    try {
+      const data = await getViolationTypes();
+      setViolationTypes(data);
+    } catch (error) {
+      console.error('Error fetching violation types:', error);
+    }
+  };
+
+  const fetchTaxPeriods = async () => {
+    try {
+      const data = await getTaxPeriods();
+      setTaxPeriods(data);
+    } catch (error) {
+      console.error('Error fetching tax periods:', error);
+    }
+  };
+
+  const isInspectionCompleted = (inspectionData) => {
+    if (!inspectionData) return false;
+    
+    // Проверяем статус "Завершена" или дата проверки уже прошла
+    const inspectionDate = new Date(inspectionData.inspection_date);
+    const today = new Date();
+    
+    return inspectionData.inspection_type_status_id === 3 || inspectionDate < today;
+  };
+
+  const canAddViolations = () => {
+    return isInspectionCompleted(inspectionDetail);
+  };
+
+  const handleAddViolation = async (e) => {
+    e.preventDefault();
+    try {
+      await createViolation({
+        inspection_id: inspectionDetail.inspection_id,
+        ...violationForm
+      });
+      setViolationForm({ violation_type_id: '', sum_to_pay: '', period_id: '' });
+      setShowAddViolation(false);
+      await fetchViolations();
+      alert('Нарушение успешно добавлено!');
+    } catch (error) {
+      console.error('Error adding violation:', error);
+      alert('Ошибка при добавлении нарушения: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleEditViolation = (violation) => {
+    setEditingViolation(violation);
+    setViolationForm({
+      violation_type_id: violation.violation_type_id.toString(),
+      sum_to_pay: violation.sum_to_pay ? violation.sum_to_pay.toString() : '',
+      period_id: violation.period_id.toString()
+    });
+    setShowAddViolation(true);
+  };
+
+  const handleUpdateViolation = async (e) => {
+    e.preventDefault();
+    try {
+      await updateViolation(editingViolation.violation_id, violationForm);
+      setEditingViolation(null);
+      setViolationForm({ violation_type_id: '', sum_to_pay: '', period_id: '' });
+      setShowAddViolation(false);
+      await fetchViolations();
+      alert('Нарушение успешно обновлено!');
+    } catch (error) {
+      console.error('Error updating violation:', error);
+      alert('Ошибка при обновлении нарушения');
+    }
+  };
+
+  const handleDeleteViolation = async (violationId) => {
+    if (window.confirm('Вы уверены, что хотите удалить это нарушение?')) {
+      try {
+        await deleteViolation(violationId);
+        await fetchViolations();
+        alert('Нарушение успешно удалено!');
+      } catch (error) {
+        console.error('Error deleting violation:', error);
+        alert('Ошибка при удалении нарушения');
+      }
+    }
+  };
+
+  const resetViolationForm = () => {
+    setViolationForm({ violation_type_id: '', sum_to_pay: '', period_id: '' });
+    setEditingViolation(null);
+    setShowAddViolation(false);
+  };
+
+  const getInspectionStatus = (statusId) => {
+    const statusMap = {
+      1: { text: 'Запланирована', color: 'warning' },
+      2: { text: 'В процессе', color: 'info' },
+      3: { text: 'Завершена', color: 'success' },
+      4: { text: 'Отменена', color: 'danger' }
     };
-    setViolations(prev => [...prev, newViolation]);
+    return statusMap[statusId] || { text: 'Неизвестно', color: 'secondary' };
   };
 
-  const removeViolation = (violationId) => {
-    setViolations(prev => prev.filter(v => v.violation_id !== violationId));
+  const getInspectionTypeName = (typeId) => {
+    if (!inspectionTypes || inspectionTypes.length === 0) {
+      return `Тип (${typeId})`;
+    }
+    const type = inspectionTypes.find(t => t.id === typeId);
+    return type ? type.name : `Тип (${typeId})`;
   };
 
-  const updateViolation = (violationId, field, value) => {
-    setViolations(prev => prev.map(v => 
-      v.violation_id === violationId ? { ...v, [field]: value } : v
-    ));
+  const getInspectionReasonName = (reasonId) => {
+    if (!inspectionBases || inspectionBases.length === 0) {
+      return `Причина (${reasonId})`;
+    }
+    const reason = inspectionBases.find(r => r.id === reasonId);
+    return reason ? reason.name : `Причина (${reasonId})`;
   };
 
-  // Функция для открытия карточки налогоплательщика в новой вкладке
-  const openTaxpayerCard = () => {
-    const searchUrl = `/worker/search?inn=${inspection.taxpayer_inn}`;
-    window.open(searchUrl, '_blank');
-  };
+  if (loading) return (
+    <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="modal-dialog modal-xl">
+        <div className="modal-content">
+          <div className="modal-body text-center py-5">
+            <Spinner />
+            <p className="mt-3">Загрузка деталей проверки...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (!inspectionDetail) return null;
+
+  const status = getInspectionStatus(inspectionDetail.inspection_type_status_id);
+  const canAddViolationsFlag = canAddViolations();
 
   return (
     <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      <div className="modal-dialog modal-xl modal-dialog-centered">
+      <div className="modal-dialog modal-xl">
         <div className="modal-content">
           <div className="modal-header bg-primary text-white d-flex justify-content-between align-items-center">
             <h5 className="modal-title mb-0">
               <i className="bi bi-clipboard-check me-2"></i>
-              Проверка #{inspection.inspection_id}
+              Проверка #{inspectionDetail.inspection_id}
             </h5>
             <div className="d-flex align-items-center gap-2">
-              {/* Показываем кнопку только если НЕ из поиска */}
-              {!fromSearch && (
-                <button 
-                  onClick={openTaxpayerCard}
-                  className="btn btn-outline-light btn-sm"
-                >
-                  <i className="bi bi-person-badge me-1"></i>
-                  Карточка налогоплательщика
-                </button>
-              )}
-              <button 
-                type="button" 
-                className="btn-close btn-close-white" 
-                onClick={onClose}
-                style={{ margin: 0 }}
-              ></button>
+              <span className={`badge bg-${status.color} fs-6`}>
+                {status.text}
+              </span>
+              <button type="button" className="btn-close btn-close-white" onClick={onClose}></button>
             </div>
           </div>
-          <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-            
-            {/* Навигация по вкладкам */}
-            <nav className="mb-4">
-              <div className="nav nav-tabs">
-                <button
-                  className={`nav-link ${activeTab === 'inspection' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('inspection')}
-                >
-                  Информация о проверке
-                </button>
-                {canEdit && (
-                  <button
-                    className={`nav-link ${activeTab === 'edit' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('edit')}
-                  >
-                    Редактирование
-                  </button>
-                )}
-                <button
-                  className={`nav-link ${activeTab === 'violations' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('violations')}
-                >
-                  Нарушения
-                </button>
+          <div className="modal-body">
+            <div className="row">
+              <div className="col-md-6">
+                <h6>Основная информация</h6>
+                {/* ИЗМЕНИЛИ ОТОБРАЖЕНИЕ ДАТЫ НА ПОЛНУЮ ДАТУ И ВРЕМЯ */}
+                <p><strong>Дата и время:</strong> {new Date(inspectionDetail.inspection_date).toLocaleString('ru-RU', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}</p>
+                <p><strong>Тип:</strong> {getInspectionTypeName(inspectionDetail.inspection_type_id)}</p>
+                <p><strong>Причина:</strong> {getInspectionReasonName(inspectionDetail.inspection_reason)}</p>
               </div>
-            </nav>
+              <div className="col-md-6">
+                <h6>Налогоплательщик</h6>
+                <p><strong>ИНН:</strong> {inspectionDetail.taxpayer?.inn}</p>
+                <p><strong>Наименование:</strong> {inspectionDetail.taxpayer?.fio || inspectionDetail.taxpayer?.full_name || inspectionDetail.taxpayer?.short_name}</p>
+                <p><strong>Адрес регистрации:</strong> {inspectionDetail.taxpayer?.registration_address || 'Не указан'}</p>
+              </div>
+            </div>
+            
+            <hr />
 
-            {/* Содержимое вкладок */}
-            <div className="tab-content">
-              
-              {/* Вкладка информации о проверке */}
-              {activeTab === 'inspection' && (
-                <div className="row">
-                  <div className="col-md-6">
-                    <h6 className="text-muted mb-3">Основная информация</h6>
-                    <div className="mb-3">
-                      <strong>Дата проверки:</strong> {formatDate(inspection.inspection_date)}
-                    </div>
-                    <div className="mb-3">
-                      <strong>Статус:</strong>{' '}
-                      <span className={`badge bg-${getInspectionStatusColor(inspection.inspection_type_status_id)}`}>
-                        {getInspectionStatusText(inspection.inspection_type_status_id)}
-                      </span>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Тип проверки:</strong> {getInspectionTypeText(inspection.inspection_type_id)}
-                    </div>
-                    <div className="mb-3">
-                      <strong>Основание:</strong> {getInspectionReasonText(inspection.inspection_reason)}
-                    </div>
-                  </div>
-                  
-                  <div className="col-md-6">
-                    <h6 className="text-muted mb-3">Дополнительная информация</h6>
-                    {isFutureInspection() && (
-                      <div className="alert alert-info">
-                        <i className="bi bi-info-circle me-2"></i>
-                        Это предстоящая проверка
-                      </div>
-                    )}
-                    
-                    {violations.length > 0 && (
-                      <div className="mb-3">
-                        <strong>Выявленные нарушения:</strong> {violations.length}
-                      </div>
-                    )}
-                    
-                    {inspection.tax_officers && inspection.tax_officers.length > 0 && (
-                      <div className="mb-3">
-                        <strong>Ответственные сотрудники:</strong>
-                        <ul className="mb-0 mt-1">
-                          {inspection.tax_officers.map(officer => (
-                            <li key={officer.tax_officer_id}>{officer.tax_officer_name}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Вкладка редактирования */}
-              {activeTab === 'edit' && canEdit && (
-                <div>
-                  <div className="alert alert-warning">
-                    <i className="bi bi-exclamation-triangle me-2"></i>
-                    Вы можете редактировать только предстоящие проверки
-                  </div>
-
-                  <div className="row">
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Дата проверки *</label>
-                        <input
-                          type="datetime-local"
-                          className="form-control"
-                          value={formData.inspection_date}
-                          onChange={(e) => handleFormChange('inspection_date', e.target.value)}
-                          required
-                        />
-                      </div>
-                      
-                      <div className="mb-3">
-                        <label className="form-label">Тип проверки *</label>
-                        <select
-                          className="form-select"
-                          value={formData.inspection_type_id}
-                          onChange={(e) => handleFormChange('inspection_type_id', e.target.value)}
-                          required
-                        >
-                          <option value="">Выберите тип</option>
-                          <option value="1">Выездная</option>
-                          <option value="2">Камеральная</option>
-                          <option value="3">Документарная</option>
-                        </select>
-                      </div>
-                    </div>
-                    
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Основание *</label>
-                        <select
-                          className="form-select"
-                          value={formData.inspection_reason}
-                          onChange={(e) => handleFormChange('inspection_reason', e.target.value)}
-                          required
-                        >
-                          <option value="">Выберите основание</option>
-                          <option value="1">Плановая проверка</option>
-                          <option value="2">Жалоба</option>
-                          <option value="3">Анализ рисков</option>
-                        </select>
-                      </div>
-                      
-                      <div className="mb-3">
-                        <label className="form-label">Статус *</label>
-                        <select
-                          className="form-select"
-                          value={formData.inspection_type_status_id}
-                          onChange={(e) => handleFormChange('inspection_type_status_id', e.target.value)}
-                          required
-                        >
-                          <option value="1">Запланирована</option>
-                          <option value="3">Отменена</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="d-flex gap-2 mt-4">
-                    <button
-                      className="btn btn-success"
-                      onClick={handleSave}
-                      disabled={isUpdating}
+            <div className="row">
+              <div className="col-md-6">
+                <h6>Участники проверки</h6>
+                {inspectionDetail.participants && inspectionDetail.participants.length > 0 ? (
+                  <ul className="list-group">
+                    {inspectionDetail.participants.map(participant => (
+                      <li key={participant.tax_officer_id} className="list-group-item">
+                        {participant.tax_officer_name} ({participant.unit})
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted">Участники не назначены</p>
+                )}
+              </div>
+              <div className="col-md-6">
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <h6 className="mb-0">Выявленные нарушения</h6>
+                  {canAddViolationsFlag && (
+                    <button 
+                      className="btn btn-primary btn-sm"
+                      onClick={() => setShowAddViolation(true)}
                     >
-                      {isUpdating ? (
-                        <>
-                          <span className="spinner-border spinner-border-sm me-2" />
-                          Сохранение...
-                        </>
-                      ) : (
-                        <>
-                          <i className="bi bi-check-circle me-2"></i>
-                          Сохранить изменения
-                        </>
-                      )}
+                      <i className="bi bi-plus-circle me-1"></i>
+                      Добавить нарушение
                     </button>
-                    
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setActiveTab('inspection')}
-                    >
-                      Отмена
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Вкладка нарушений */}
-              {activeTab === 'violations' && (
-                <div>
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h6 className="mb-0">Выявленные нарушения</h6>
-                    {canEdit && (
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={addViolation}
-                      >
-                        <i className="bi bi-plus-circle me-1"></i>
-                        Добавить нарушение
-                      </button>
-                    )}
-                  </div>
-
-                  {violations.length === 0 ? (
-                    <div className="text-center text-muted py-4">
-                      <i className="bi bi-shield-exclamation display-4"></i>
-                      <p className="mt-2">Нарушения не выявлены</p>
-                    </div>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="table table-striped">
-                        <thead>
-                          <tr>
-                            <th>Тип нарушения</th>
-                            <th>Сумма к оплате</th>
-                            <th>Период</th>
-                            {canEdit && <th>Действия</th>}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {violations.map(violation => (
-                            <tr key={violation.violation_id}>
-                              <td>
-                                {canEdit ? (
-                                  <select
-                                    className="form-select form-select-sm"
-                                    value={violation.violation_type_id}
-                                    onChange={(e) => updateViolation(violation.violation_id, 'violation_type_id', e.target.value)}
-                                  >
-                                    <option value="">Выберите тип</option>
-                                    <option value="1">Несвоевременная подача</option>
-                                    <option value="2">Неполная информация</option>
-                                    <option value="3">Нарушение сроков оплата</option>
-                                  </select>
-                                ) : (
-                                  violation.violation_type_name || 'Не указан'
-                                )}
-                              </td>
-                              <td>
-                                {canEdit ? (
-                                  <input
-                                    type="number"
-                                    className="form-control form-control-sm"
-                                    value={violation.sum_to_pay}
-                                    onChange={(e) => updateViolation(violation.violation_id, 'sum_to_pay', e.target.value)}
-                                    step="0.01"
-                                  />
-                                ) : (
-                                  formatCurrency(violation.sum_to_pay)
-                                )}
-                              </td>
-                              <td>
-                                {violation.period_name || 'Не указан'}
-                              </td>
-                              {canEdit && (
-                                <td>
-                                  <button
-                                    className="btn btn-outline-danger btn-sm"
-                                    onClick={() => removeViolation(violation.violation_id)}
-                                  >
-                                    <i className="bi bi-trash"></i>
-                                  </button>
-                                </td>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
                   )}
                 </div>
-              )}
+
+                {showAddViolation && (
+                  <div className="card mb-3">
+                    <div className="card-body">
+                      <h6>{editingViolation ? 'Редактирование нарушения' : 'Добавление нарушения'}</h6>
+                      <form onSubmit={editingViolation ? handleUpdateViolation : handleAddViolation}>
+                        <div className="row">
+                          <div className="col-md-4">
+                            <label className="form-label">Тип нарушения *</label>
+                            <select 
+                              className="form-select"
+                              value={violationForm.violation_type_id}
+                              onChange={(e) => setViolationForm({...violationForm, violation_type_id: e.target.value})}
+                              required
+                            >
+                              <option value="">Выберите тип</option>
+                              {violationTypes.map(type => (
+                                <option key={type.id} value={type.id}>{type.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-md-3">
+                            <label className="form-label">Сумма</label>
+                            <input 
+                              type="number" 
+                              className="form-control"
+                              step="0.01"
+                              value={violationForm.sum_to_pay}
+                              onChange={(e) => setViolationForm({...violationForm, sum_to_pay: e.target.value})}
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div className="col-md-3">
+                            <label className="form-label">Период *</label>
+                            <select 
+                              className="form-select"
+                              value={violationForm.period_id}
+                              onChange={(e) => setViolationForm({...violationForm, period_id: e.target.value})}
+                              required
+                            >
+                              <option value="">Выберите период</option>
+                              {taxPeriods.map(period => (
+                                <option key={period.period_id} value={period.period_id}>{period.period_name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-md-2 d-flex align-items-end">
+                            <button type="submit" className="btn btn-success btn-sm">
+                              {editingViolation ? 'Обновить' : 'Добавить'}
+                            </button>
+                            <button 
+                              type="button" 
+                              className="btn btn-secondary btn-sm ms-2" 
+                              onClick={resetViolationForm}
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+
+                {violations.length === 0 ? (
+                  <p className="text-muted">Нарушения не выявлены</p>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="table table-sm table-striped">
+                      <thead>
+                        <tr>
+                          <th>Тип нарушения</th>
+                          <th>Сумма</th>
+                          <th>Период</th>
+                          {canAddViolationsFlag && <th>Действия</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {violations.map(violation => (
+                          <tr key={violation.violation_id}>
+                            <td>{violation.violation_type_name}</td>
+                            <td>
+                              {violation.sum_to_pay ? 
+                                `${parseFloat(violation.sum_to_pay).toLocaleString('ru-RU')} руб.` : 
+                                'Не указана'
+                              }
+                            </td>
+                            <td>{violation.period_name}</td>
+                            {canAddViolationsFlag && (
+                              <td>
+                                <button 
+                                  className="btn btn-warning btn-sm me-1"
+                                  onClick={() => handleEditViolation(violation)}
+                                >
+                                  <i className="bi bi-pencil"></i>
+                                </button>
+                                <button 
+                                  className="btn btn-danger btn-sm"
+                                  onClick={() => handleDeleteViolation(violation.violation_id)}
+                                >
+                                  <i className="bi bi-trash"></i>
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {!canAddViolationsFlag && (
+                  <div className="alert alert-info mt-3">
+                    <i className="bi bi-info-circle me-2"></i>
+                    Для добавления нарушений проверка должна быть завершена
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="modal-footer">
