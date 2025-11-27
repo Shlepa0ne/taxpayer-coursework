@@ -253,6 +253,30 @@ class TaxpayerLoginAPIView(APIView):
             }, status=status.HTTP_200_OK)
 
 
+def _make_tokens_for_worker(inn: str, role_id: int):
+    """
+    Создает токены для сотрудника с role_id в payload
+    """
+    refresh = RefreshToken()
+    
+    # Добавляем кастомные claims в refresh токен
+    refresh['inn'] = inn
+    refresh['user_type'] = 'worker'
+    refresh['role_id'] = role_id
+    
+    # Создаем access токен из refresh
+    access = refresh.access_token
+    
+    # Добавляем те же claims в access токен
+    access['inn'] = inn
+    access['user_type'] = 'worker'
+    access['role_id'] = role_id
+    
+    return {
+        'refresh': str(refresh),
+        'access': str(access)
+    }
+
 class WorkerLoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -271,17 +295,25 @@ class WorkerLoginAPIView(APIView):
         if not check_password(password, cred.password_hash):
             return Response({'detail': 'Неверный ИНН или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        tokens = _make_tokens_for_inn(inn, 'worker')
+        # Получаем role_id из связанного tax_officer
+        role_id = 1  # по умолчанию обычный инспектор
+        if cred.tax_officer:
+            role_id = cred.tax_officer.role_id
+
+        # ИСПРАВЛЕНИЕ: используем новую функцию с role_id
+        tokens = _make_tokens_for_worker(inn, role_id)
+        
         return Response({
                 "refresh": tokens["refresh"],
                 "access": tokens["access"],
-                "role": "worker"
+                "role": "worker",
+                "role_id": role_id
             }, status=status.HTTP_200_OK)
     
 
 class CustomTokenRefreshView(TokenRefreshView):
     """
-    Refresh, который возвращает access/refresh с inn и user_type.
+    Refresh, который возвращает access/refresh с inn, user_type и role_id.
     """
     def post(self, request, *args, **kwargs):
         refresh_token = request.data.get("refresh")
@@ -297,24 +329,41 @@ class CustomTokenRefreshView(TokenRefreshView):
         # старые claim'ы берём из refresh токена:
         inn = refresh.get("inn")
         user_type = refresh.get("user_type")
+        role_id = refresh.get("role_id", 1)  # Добавляем получение role_id
 
         if not inn or not user_type:
             return Response({"detail": "Refresh токен не содержит данные пользователя"}, status=400)
 
-        # генерируем новый refresh
+        # Для сотрудников дополнительно проверяем role_id из базы
+        if user_type == 'worker' and not role_id:
+            try:
+                worker_auth = WorkerAuth.objects.get(inn=inn)
+                if worker_auth.tax_officer:
+                    role_id = worker_auth.tax_officer.role_id
+            except WorkerAuth.DoesNotExist:
+                role_id = 1
+
+        # генерируем новый refresh с ВСЕМИ claim'ами
         new_refresh = RefreshToken()
         new_refresh["inn"] = inn
         new_refresh["user_type"] = user_type
+        new_refresh["role_id"] = role_id  # Сохраняем role_id
 
-        # новый access
+        # новый access с ВСЕМИ claim'ами
         access = new_refresh.access_token
+        access["inn"] = inn
+        access["user_type"] = user_type
+        access["role_id"] = role_id  # Сохраняем role_id
 
-        return Response({
+        response_data = {
             "refresh": str(new_refresh),
             "access": str(access),
             "inn": inn,
-            "user_type": user_type
-        })
+            "user_type": user_type,
+            "role_id": role_id  # Всегда возвращаем role_id
+        }
+
+        return Response(response_data)
     
 class CurrentTaxpayerAPIView(APIView):
     permission_classes = [IsAuthenticated]

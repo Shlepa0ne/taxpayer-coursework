@@ -40,6 +40,33 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+function WorkerRoleRoute({ children, allowedRoles }) {
+  const { user } = useAuth();
+  
+  console.log('WorkerRoleRoute debug:', {
+    user,
+    allowedRoles,
+    userType: user?.user_type,
+    userRoleId: user?.role_id,
+    isWorker: user?.user_type === 'worker',
+    hasAllowedRole: allowedRoles.includes(user?.role_id)
+  });
+  
+  // Проверяем, что пользователь - сотрудник и имеет нужную роль
+  if (user?.user_type !== 'worker') {
+    console.log('Redirecting: not a worker');
+    return <Navigate to="/" replace />;
+  }
+  
+  // Проверяем роль пользователя
+  if (!allowedRoles.includes(user?.role_id)) {
+    console.log('Redirecting: role not allowed', user?.role_id, 'not in', allowedRoles);
+    return <Navigate to="/worker" replace />;
+  }
+  
+  return children;
+}
+
 // Компонент для редиректа в зависимости от роли
 function RoleBasedRedirect() {
   const { user } = useAuth();
@@ -76,15 +103,41 @@ function App() {
           </ProtectedRoute>
         }
       >
+        {/* Маршруты для всех инспекторов (роли 1, 2, 3) */}
         <Route index element={<WorkersDashboardHome />} />
         <Route path="search" element={<WorkerTaxpayerSearch />} />
         <Route path="requests" element={<WorkerRequests />} />
         <Route path="declarations" element={<WorkerDeclarations />} />
-        <Route path="reports" element={<WorkerReports />} />
-        <Route path="add-worker" element={<WorkerAddWorker />} />
-        <Route path="add-taxpayer" element={<WorkerAddTaxpayer />} />
         <Route path="profile" element={<WorkerProfile />} />
         <Route path="inspections" element={<WorkerInspections />} />
+        
+        {/* Маршруты для старших инспекторов и руководителей (роли 2, 3) */}
+        <Route 
+          path="add-taxpayer" 
+          element={
+            <WorkerRoleRoute allowedRoles={[2, 3]}>
+              <WorkerAddTaxpayer />
+            </WorkerRoleRoute>
+          } 
+        />
+        
+        {/* Маршруты только для руководителей (роль 3) */}
+        <Route 
+          path="reports" 
+          element={
+            <WorkerRoleRoute allowedRoles={[3]}>
+              <WorkerReports />
+            </WorkerRoleRoute>
+          } 
+        />
+        <Route 
+          path="add-worker" 
+          element={
+            <WorkerRoleRoute allowedRoles={[3]}>
+              <WorkerAddWorker />
+            </WorkerRoleRoute>
+          } 
+        />
       </Route>
       
       {/* Личный кабинет налогоплательщика */}

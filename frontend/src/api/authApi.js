@@ -21,7 +21,8 @@ export async function loginWorker({ inn, password }) {
   const tokens = {
     access: data.access,
     refresh: data.refresh,
-    role: data.role
+    role: data.role,
+    role_id: data.role_id  // Сохраняем role_id
   };
 
   localStorage.setItem("authTokens", JSON.stringify(tokens));
