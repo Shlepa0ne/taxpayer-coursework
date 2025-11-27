@@ -2200,3 +2200,105 @@ class AllInspectionsListAPIView(APIView):
         except Exception as e:
             print(f"Error in AllInspectionsListAPIView: {e}")
             return Response({'error': str(e)}, status=500)
+        
+class CreateWorkerAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        try:
+            with transaction.atomic():
+                inn = request.data.get('inn')
+                tax_officer_name = request.data.get('tax_officer_name')
+                unit = request.data.get('unit')
+                role_id = request.data.get('role_id')
+
+                # Валидация обязательных полей
+                if not all([inn, tax_officer_name, unit, role_id]):
+                    return Response(
+                        {'error': 'Все поля обязательны для заполнения'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Проверяем уникальность ИНН
+                if WorkerAuth.objects.filter(inn=inn).exists():
+                    return Response(
+                        {'error': 'Сотрудник с таким ИНН уже существует'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Получаем следующий доступный tax_officer_id
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT COALESCE(MAX(tax_officer_id), 0) + 1 FROM tax_officer")
+                    next_tax_officer_id = cursor.fetchone()[0]
+
+                # Создаем запись в tax_officer с явным указанием ID
+                tax_officer = TaxOfficer.objects.create(
+                    tax_officer_id=next_tax_officer_id,
+                    tax_officer_name=tax_officer_name,
+                    unit=unit,
+                    role_id=role_id
+                )
+
+                # Генерируем случайный пароль
+                password = self.generate_password()
+
+                # Создаем запись в worker_auth
+                WorkerAuth.objects.create(
+                    inn=inn,
+                    password_hash=make_password(password),
+                    tax_officer=tax_officer
+                )
+
+                return Response({
+                    'message': 'Сотрудник успешно создан',
+                    'worker_id': tax_officer.tax_officer_id,
+                    'password': password
+                }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при создании сотрудника: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def generate_password(self, length=10):
+        import random
+        import string
+        characters = string.ascii_letters + string.digits
+        return ''.join(random.choice(characters) for _ in range(length))
+    
+class ResetWorkerPasswordAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request):
+        inn = request.data.get('inn')
+        if not inn:
+            return Response({'error': 'ИНН обязателен'}, status=400)
+
+        try:
+            with transaction.atomic():
+                # Проверяем, существует ли сотрудник
+                worker_auth = WorkerAuth.objects.get(inn=inn)
+
+                # Генерируем новый пароль
+                new_password = self.generate_password()
+                worker_auth.password_hash = make_password(new_password)
+                worker_auth.save()
+
+                return Response({
+                    'message': 'Пароль успешно сброшен',
+                    'new_password': new_password
+                })
+
+        except WorkerAuth.DoesNotExist:
+            return Response({'error': 'Сотрудник с таким ИНН не найден'}, status=404)
+        except Exception as e:
+            return Response({'error': f'Ошибка при сбросе пароля: {str(e)}'}, status=500)
+
+    def generate_password(self, length=10):
+        import random
+        import string
+        characters = string.ascii_letters + string.digits
+        return ''.join(random.choice(characters) for _ in range(length))

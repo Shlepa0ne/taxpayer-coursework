@@ -20,13 +20,6 @@ export const getUpcomingInspectionsCount = async () => {
   return data;
 };
 
-
-// Создать нового сотрудника
-export const createWorker = async (workerData) => {
-  const { data } = await axiosInstance.post('/worker/create-worker/', workerData);
-  return data;
-};
-
 // Поиск налогоплательщиков
 export const searchTaxpayers = async (searchParams) => {
   const { data } = await axiosInstance.get('/worker/taxpayer-search/', { params: searchParams });
@@ -299,5 +292,17 @@ export const updateInspection = async (inspectionId, inspectionData) => {
 // Обновить статус проверки
 export const updateInspectionStatus = async (inspectionId, statusData) => {
   const { data } = await axiosInstance.patch(`/worker/inspections/${inspectionId}/update-status/`, statusData);
+  return data;
+};
+
+// Создать нового сотрудника
+export const createWorker = async (workerData) => {
+  const { data } = await axiosInstance.post('/worker/create-worker/', workerData);
+  return data;
+};
+
+// Сброс пароля сотрудника
+export const resetWorkerPassword = async (inn) => {
+  const { data } = await axiosInstance.post('/worker/reset-worker-password/', { inn });
   return data;
 };

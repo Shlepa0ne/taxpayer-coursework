@@ -134,7 +134,7 @@ const WorkersDashboardPage = () => {
             className={`nav-link ${isActive('/worker/add-worker') ? 'active' : ''}`}
           >
             <i className="bi bi-person-plus me-2"></i>
-            Регистрация нового сотрудника
+            Работа с аккаунтами сотрудников
           </Link>
         </li>
       </>
