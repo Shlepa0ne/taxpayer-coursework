@@ -2351,3 +2351,185 @@ class ResetWorkerPasswordAPIView(APIView):
         import string
         characters = string.ascii_letters + string.digits
         return ''.join(random.choice(characters) for _ in range(length))
+    
+class TaxAccrualsListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request, taxpayer_id):
+        try:
+            taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
+            
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT 
+                        ta.tax_accrual_id,
+                        ta.accrual_date,
+                        ta.accrual_amount,
+                        ta.percent_amount,
+                        ta.due_date,
+                        ta.income_status_id,
+                        tt.tax_type_id,
+                        tt.tax_type_name,
+                        o.object_name,
+                        o.object_address,
+                        MAX(tp.payment_date) as last_payment_date,
+                        COALESCE(SUM(tp.payment_amount), 0) as paid_amount
+                    FROM tax_accrual ta
+                    LEFT JOIN tax_type tt ON ta.tax_type_id = tt.tax_type_id
+                    LEFT JOIN taxable_object o ON ta.object_id = o.object_id
+                    LEFT JOIN tax_payment tp ON ta.tax_accrual_id = tp.tax_income_id
+                    WHERE ta.taxpayer_id = %s
+                    GROUP BY 
+                        ta.tax_accrual_id, ta.accrual_date, ta.accrual_amount, 
+                        ta.percent_amount, ta.due_date, ta.income_status_id,
+                        tt.tax_type_id, tt.tax_type_name, o.object_name, 
+                        o.object_address
+                    ORDER BY ta.accrual_date DESC
+                """, [taxpayer_id])
+                
+                results = cursor.fetchall()
+            
+            print(f"DEBUG: Found {len(results)} accruals for taxpayer {taxpayer_id}")  # Отладочная информация
+            
+            accruals = []
+            for row in results:
+                accrual = {
+                    'tax_accrual_id': row[0],
+                    'accrual_date': row[1],
+                    'accrual_amount': float(row[2]) if row[2] else 0,
+                    'percent_amount': float(row[3]) if row[3] else 0,
+                    'due_date': row[4],
+                    'income_status_id': row[5],
+                    'tax_type_id': row[6],
+                    'tax_type_name': row[7],
+                    'object_name': row[8],
+                    'object_address': row[9],
+                    'payment_date': row[10],
+                    'paid_amount': float(row[11]) if row[11] else 0,
+                }
+                
+                # Общая сумма (основной долг + пени)
+                total_amount = accrual['accrual_amount'] + accrual['percent_amount']
+                accrual['total_amount'] = total_amount
+                
+                # Остаток к оплате
+                accrual['remaining_amount'] = total_amount - accrual['paid_amount']
+                
+                # Статус оплаты
+                if accrual['paid_amount'] >= total_amount:
+                    accrual['payment_status'] = 'оплачено'
+                    accrual['status_color'] = 'success'
+                elif accrual['paid_amount'] > 0:
+                    accrual['payment_status'] = 'частично оплачено'
+                    accrual['status_color'] = 'warning'
+                elif accrual['due_date'] and timezone.now().date() > accrual['due_date']:
+                    accrual['payment_status'] = 'просрочено'
+                    accrual['status_color'] = 'danger'
+                else:
+                    accrual['payment_status'] = 'начислено'
+                    accrual['status_color'] = 'primary'
+                
+                accruals.append(accrual)
+            
+            return Response(accruals)
+            
+        except Taxpayer.DoesNotExist:
+            return Response({'error': 'Налогоплательщик не найден'}, status=404)
+        except Exception as e:
+            print(f"ERROR loading accruals: {str(e)}")  # Отладочная информация
+            return Response({'error': f'Ошибка загрузки начислений: {str(e)}'}, status=500)
+
+class UpdateTaxAccrualAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, accrual_id):
+        try:
+            # Проверяем права - только старшие инспекторы и руководители
+            user_inn = request.user.username
+            worker_auth = WorkerAuth.objects.get(inn=user_inn)
+            
+            if not worker_auth.tax_officer or worker_auth.tax_officer.role_id < 2:
+                return Response(
+                    {'error': 'Недостаточно прав для редактирования начислений'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            with connection.cursor() as cursor:
+                # Получаем текущие данные начисления
+                cursor.execute("""
+                    SELECT tax_accrual_id, accrual_amount, percent_amount, due_date, tax_type_id
+                    FROM tax_accrual WHERE tax_accrual_id = %s
+                """, [accrual_id])
+                current_data = cursor.fetchone()
+                
+                if not current_data:
+                    return Response({'error': 'Начисление не найдено'}, status=404)
+                
+                # Подготавливаем данные для обновления
+                update_fields = []
+                params = []
+                
+                if 'accrual_amount' in request.data:
+                    update_fields.append("accrual_amount = %s")
+                    params.append(request.data['accrual_amount'])
+                
+                if 'percent_amount' in request.data:
+                    update_fields.append("percent_amount = %s")
+                    params.append(request.data['percent_amount'])
+                
+                if 'due_date' in request.data:
+                    update_fields.append("due_date = %s")
+                    params.append(request.data['due_date'])
+                
+                if 'tax_type_id' in request.data:
+                    update_fields.append("tax_type_id = %s")
+                    params.append(request.data['tax_type_id'])
+                
+                if update_fields:
+                    params.append(accrual_id)
+                    cursor.execute(f"""
+                        UPDATE tax_accrual 
+                        SET {', '.join(update_fields)}
+                        WHERE tax_accrual_id = %s
+                    """, params)
+                
+                # Получаем обновленные данные
+                cursor.execute("""
+                    SELECT 
+                        ta.tax_accrual_id,
+                        ta.accrual_date,
+                        ta.accrual_amount,
+                        ta.percent_amount,
+                        ta.due_date,
+                        tt.tax_type_name,
+                        COALESCE(SUM(tp.payment_amount), 0) as paid_amount
+                    FROM tax_accrual ta
+                    LEFT JOIN tax_type tt ON ta.tax_type_id = tt.tax_type_id
+                    LEFT JOIN tax_payment tp ON ta.tax_accrual_id = tp.tax_income_id
+                    WHERE ta.tax_accrual_id = %s
+                    GROUP BY ta.tax_accrual_id, ta.accrual_date, ta.accrual_amount, 
+                             ta.percent_amount, ta.due_date, tt.tax_type_name
+                """, [accrual_id])
+                
+                updated_data = cursor.fetchone()
+                
+                response_data = {
+                    'tax_accrual_id': updated_data[0],
+                    'accrual_date': updated_data[1],
+                    'accrual_amount': float(updated_data[2]) if updated_data[2] else 0,
+                    'percent_amount': float(updated_data[3]) if updated_data[3] else 0,
+                    'due_date': updated_data[4],
+                    'tax_type_name': updated_data[5],
+                    'paid_amount': float(updated_data[6]) if updated_data[6] else 0,
+                    'total_amount': (float(updated_data[2]) if updated_data[2] else 0) + 
+                                   (float(updated_data[3]) if updated_data[3] else 0)
+                }
+                
+                return Response(response_data)
+                
+        except WorkerAuth.DoesNotExist:
+            return Response({'error': 'Сотрудник не найден'}, status=404)
+        except Exception as e:
+            return Response({'error': f'Ошибка при обновлении начисления: {str(e)}'}, status=500)

@@ -7,13 +7,15 @@ import {
   getRequestDetail, 
   updateRequestStatus, 
   getCurrentWorker,
-  updateDeclarationStatus // ДОБАВИТЬ этот импорт
+  updateDeclarationStatus,
+  updateTaxAccrual // ДОБАВЛЕН
 } from '../../api/workersApi';
 import Spinner from '../../components/ui/Spinner';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import RequestDetailModal from './components/RequestDetailModal';
-import DeclarationDetailModal from './components/DeclarationDetailModal'; // ДОБАВИТЬ
-import InspectionDetailModal from './components/InspectionDetailModal'; // ДОБАВИТЬ
+import DeclarationDetailModal from './components/DeclarationDetailModal';
+import InspectionDetailModal from './components/InspectionDetailModal';
+import AccrualDetailModal from './components/AccrualDetailModal'; // ДОБАВЛЕН
 import TaxpayerDetailView from './components/TaxpayerDetailView';
 import SearchForm from './components/SearchForm';
 import SearchResults from './components/SearchResults';
@@ -30,11 +32,13 @@ const WorkerTaxpayerSearch = () => {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
   
-  // ДОБАВИТЬ: состояния для модальных окон
+  // Состояния для модальных окон
   const [selectedDeclaration, setSelectedDeclaration] = useState(null);
   const [showDeclarationModal, setShowDeclarationModal] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState(null);
   const [showInspectionModal, setShowInspectionModal] = useState(false);
+  const [selectedAccrual, setSelectedAccrual] = useState(null); // ДОБАВЛЕН
+  const [showAccrualModal, setShowAccrualModal] = useState(false); // ДОБАВЛЕН
   
   const [currentWorker, setCurrentWorker] = useState(null);
   const queryClient = useQueryClient();
@@ -120,7 +124,7 @@ const WorkerTaxpayerSearch = () => {
     },
   });
 
-  // ДОБАВИТЬ: функция для обновления статуса декларации
+  // Функция для обновления статуса декларации
   const handleDeclarationStatusUpdate = async (declarationId, newStatus, comment = '') => {
     try {
       await updateDeclarationStatus(declarationId, {
@@ -138,7 +142,7 @@ const WorkerTaxpayerSearch = () => {
     }
   };
 
-  // ДОБАВИТЬ: функция для обновления проверки
+  // Функция для обновления проверки
   const handleInspectionUpdate = async (inspectionId, inspectionData) => {
     try {
       // Здесь должен быть API вызов для обновления проверки
@@ -155,25 +159,23 @@ const WorkerTaxpayerSearch = () => {
     }
   };
 
-  // ДОБАВИТЬ: функция для клика по декларации
-  const handleDeclarationClick = async (declarationId) => {
-    if (!selectedTaxpayer) return;
-    
-    const declaration = selectedTaxpayer.declarations.find(d => d.declaration_id === declarationId);
-    if (declaration) {
-      setSelectedDeclaration(declaration);
-      setShowDeclarationModal(true);
-    }
-  };
-
-  // ДОБАВИТЬ: функция для клика по проверке
-  const handleInspectionClick = async (inspectionId) => {
-    if (!selectedTaxpayer) return;
-    
-    const inspection = selectedTaxpayer.inspections.find(i => i.inspection_id === inspectionId);
-    if (inspection) {
-      setSelectedInspection(inspection);
-      setShowInspectionModal(true);
+  // Функция для обновления начисления
+  const handleAccrualUpdate = async (accrualId, updateData) => {
+    try {
+      await updateTaxAccrual(accrualId, updateData);
+      
+      // Обновляем данные налогоплательщика после изменения
+      if (selectedTaxpayer) {
+        const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
+        setSelectedTaxpayer(updatedTaxpayer);
+      }
+      
+      setShowAccrualModal(false);
+      setSelectedAccrual(null);
+    } catch (error) {
+      console.error('WorkerTaxpayerSearch: Update failed', error);
+      alert('Ошибка при обновлении начисления: ' + error.message);
+      throw error;
     }
   };
 
@@ -188,10 +190,44 @@ const WorkerTaxpayerSearch = () => {
     }
   };
 
+  // Функция для клика по декларации
+  const handleDeclarationClick = async (declarationId) => {
+    if (!selectedTaxpayer) return;
+    
+    const declaration = selectedTaxpayer.declarations.find(d => d.declaration_id === declarationId);
+    if (declaration) {
+      setSelectedDeclaration(declaration);
+      setShowDeclarationModal(true);
+    }
+  };
+
+  // Функция для клика по проверке
+  const handleInspectionClick = async (inspectionId) => {
+    if (!selectedTaxpayer) return;
+    
+    const inspection = selectedTaxpayer.inspections.find(i => i.inspection_id === inspectionId);
+    if (inspection) {
+      setSelectedInspection(inspection);
+      setShowInspectionModal(true);
+    }
+  };
+
+  // Функция для клика по начислению
+  const handleAccrualClick = async (accrualId) => {
+    if (!selectedTaxpayer) return;
+    
+    // Находим начисление в данных налогоплательщика
+    const accrual = selectedTaxpayer.accruals?.find(a => a.tax_accrual_id === accrualId);
+    if (accrual) {
+      setSelectedAccrual(accrual);
+      setShowAccrualModal(true);
+    }
+  };
+
   // Проверяем, может ли сотрудник изменять статус заявлений
   const canChangeRequestStatus = currentWorker?.can_review_requests || false;
 
-  // ДОБАВИТЬ: проверка является ли сотрудник старшим инспектором
+  // Проверка является ли сотрудник старшим инспектором
   const isSeniorInspector = currentWorker?.role_id && [2, 3].includes(Number(currentWorker.role_id));
 
   // Функция для обновления статуса заявления
@@ -270,8 +306,9 @@ const WorkerTaxpayerSearch = () => {
               <TaxpayerDetailView 
                 taxpayer={selectedTaxpayer} 
                 onRequestClick={handleRequestClick}
-                onDeclarationClick={handleDeclarationClick} // ДОБАВИТЬ
-                onInspectionClick={handleInspectionClick} // ДОБАВИТЬ
+                onDeclarationClick={handleDeclarationClick}
+                onInspectionClick={handleInspectionClick}
+                onAccrualClick={handleAccrualClick} // ДОБАВЛЕН
                 canChangeStatus={canChangeRequestStatus}
                 onTaxpayerUpdate={handleTaxpayerSelect}
                 currentWorker={currentWorker}
@@ -281,7 +318,7 @@ const WorkerTaxpayerSearch = () => {
         </div>
       )}
 
-      {/* Модальные окна ВЫНЕСЕНЫ НА ВЕРХНИЙ УРОВЕНЬ */}
+      {/* Модальные окна */}
       
       {/* Модальное окно для работы с заявлениями */}
       {showRequestModal && selectedRequest && (
@@ -326,6 +363,21 @@ const WorkerTaxpayerSearch = () => {
           isUpdating={false}
           canChangeStatus={canChangeRequestStatus}
           isSeniorOrManager={isSeniorInspector}
+          fromSearch={true}
+        />
+      )}
+
+      {/* Модальное окно для начислений */}
+      {showAccrualModal && selectedAccrual && (
+        <AccrualDetailModal
+          accrual={selectedAccrual}
+          onClose={() => {
+            setShowAccrualModal(false);
+            setSelectedAccrual(null);
+          }}
+          onUpdate={handleAccrualUpdate}
+          isUpdating={false}
+          canChangeStatus={isSeniorInspector}
           fromSearch={true}
         />
       )}

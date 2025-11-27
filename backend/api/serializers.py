@@ -533,6 +533,7 @@ class TaxpayerDetailSerializer(serializers.ModelSerializer):
     taxable_objects = serializers.SerializerMethodField()
     declarations = serializers.SerializerMethodField()
     reduce_requests = serializers.SerializerMethodField()
+    accruals = serializers.SerializerMethodField()
     
     class Meta:
         model = Taxpayer
@@ -543,7 +544,7 @@ class TaxpayerDetailSerializer(serializers.ModelSerializer):
             'end_date', 'executive_list', 'payer_type_id', 'region_key',
             'tax_regime_id', 'payer_status_id', 'region_name', 'tax_regime_name', 'payer_type_name',  # ДОБАВЛЕНО payer_status_id
             'risk_score', 'documents', 'contacts', 'inspections',
-            'taxable_objects', 'declarations', 'reduce_requests'
+            'taxable_objects', 'declarations', 'reduce_requests', 'accruals'
         ]
     
     def get_region_name(self, obj):
@@ -622,6 +623,90 @@ class TaxpayerDetailSerializer(serializers.ModelSerializer):
             requests = TaxReduceRequest.objects.filter(taxpayer=obj).select_related('reduce_base', 'request_status', 'reduce_type')
             return TaxReduceRequestListSerializer(requests, many=True).data
         except Exception:
+            return []
+        
+    def get_accruals(self, obj):
+        """Получает налоговые начисления для налогоплательщика"""
+        try:
+            taxpayer_id = obj.taxpayer_id
+            print(f"DEBUG: Getting accruals for taxpayer {taxpayer_id}")  # Отладочная информация
+            
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT 
+                        ta.tax_accrual_id,
+                        ta.accrual_date,
+                        ta.accrual_amount,
+                        ta.percent_amount,
+                        ta.due_date,
+                        ta.income_status_id,
+                        tt.tax_type_id,
+                        tt.tax_type_name,
+                        o.object_name,
+                        o.object_address,
+                        MAX(tp.payment_date) as last_payment_date,
+                        COALESCE(SUM(tp.payment_amount), 0) as paid_amount
+                    FROM tax_accrual ta
+                    LEFT JOIN tax_type tt ON ta.tax_type_id = tt.tax_type_id
+                    LEFT JOIN taxable_object o ON ta.object_id = o.object_id
+                    LEFT JOIN tax_payment tp ON ta.tax_accrual_id = tp.tax_income_id
+                    WHERE ta.taxpayer_id = %s
+                    GROUP BY 
+                        ta.tax_accrual_id, ta.accrual_date, ta.accrual_amount, 
+                        ta.percent_amount, ta.due_date, ta.income_status_id,
+                        tt.tax_type_id, tt.tax_type_name, o.object_name, 
+                        o.object_address
+                    ORDER BY ta.accrual_date DESC
+                """, [taxpayer_id])
+                
+                results = cursor.fetchall()
+            
+            print(f"DEBUG: Found {len(results)} accruals for taxpayer {taxpayer_id}")  # Отладочная информация
+            
+            accruals = []
+            for row in results:
+                accrual = {
+                    'tax_accrual_id': row[0],
+                    'accrual_date': row[1],
+                    'accrual_amount': float(row[2]) if row[2] else 0,
+                    'percent_amount': float(row[3]) if row[3] else 0,
+                    'due_date': row[4],
+                    'income_status_id': row[5],
+                    'tax_type_id': row[6],
+                    'tax_type_name': row[7],
+                    'object_name': row[8],
+                    'object_address': row[9],
+                    'payment_date': row[10],
+                    'paid_amount': float(row[11]) if row[11] else 0,
+                }
+                
+                # Общая сумма (основной долг + пени)
+                total_amount = accrual['accrual_amount'] + accrual['percent_amount']
+                accrual['total_amount'] = total_amount
+                
+                # Остаток к оплате
+                accrual['remaining_amount'] = total_amount - accrual['paid_amount']
+                
+                # Статус оплаты
+                if accrual['paid_amount'] >= total_amount:
+                    accrual['payment_status'] = 'оплачено'
+                    accrual['status_color'] = 'success'
+                elif accrual['paid_amount'] > 0:
+                    accrual['payment_status'] = 'частично оплачено'
+                    accrual['status_color'] = 'warning'
+                elif accrual['due_date'] and timezone.now().date() > accrual['due_date']:
+                    accrual['payment_status'] = 'просрочено'
+                    accrual['status_color'] = 'danger'
+                else:
+                    accrual['payment_status'] = 'начислено'
+                    accrual['status_color'] = 'primary'
+                
+                accruals.append(accrual)
+            
+            return accruals
+            
+        except Exception as e:
+            print(f"ERROR in get_accruals for taxpayer {obj.taxpayer_id}: {str(e)}")  # Отладочная информация
             return []
         
 class TaxReduceRequestDetailSerializer(serializers.ModelSerializer):

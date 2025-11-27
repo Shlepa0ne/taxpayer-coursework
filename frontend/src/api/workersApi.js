@@ -306,3 +306,15 @@ export const resetWorkerPassword = async (inn) => {
   const { data } = await axiosInstance.post('/worker/reset-worker-password/', { inn });
   return data;
 };
+
+// Получить налоговые начисления налогоплательщика
+export const getTaxAccruals = async (taxpayerId) => {
+  const { data } = await axiosInstance.get(`/worker/taxpayer/${taxpayerId}/accruals/`);
+  return data;
+};
+
+// Обновить налоговое начисление
+export const updateTaxAccrual = async (accrualId, updateData) => {
+  const { data } = await axiosInstance.patch(`/worker/accruals/${accrualId}/update/`, updateData);
+  return data;
+};

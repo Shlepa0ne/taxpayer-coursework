@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { updateTaxpayerInfo, updateDeclarationStatus } from '../../../api/workersApi';
+import { updateTaxpayerInfo } from '../../../api/workersApi';
 import { formatDate, getRiskScoreColor, getRiskScoreText, getRequestStatusColor, formatCurrency } from '../../../utils/formatters';
 import MainInfoView from './MainInfoView';
 import EditMainInfoForm from './EditMainInfoForm';
 import DocumentsSection from './DocumentsSection';
 import ContactsSection from './ContactsSection';
 import ObjectsSection from './ObjectsSection';
+import TaxAccrualsTab from './TaxAccrualsTab';
 
 const TaxpayerDetailView = ({ 
   taxpayer, 
   onRequestClick, 
-  onDeclarationClick, // ДОБАВЛЕНО: проп для клика по декларациям
-  onInspectionClick, // ДОБАВЛЕНО: проп для клика по проверкам
+  onDeclarationClick,
+  onInspectionClick,
+  onAccrualClick, // ДОБАВЛЕН
   canChangeStatus, 
   onTaxpayerUpdate, 
   currentWorker 
@@ -20,36 +22,22 @@ const TaxpayerDetailView = ({
   const [editingMainInfo, setEditingMainInfo] = useState(false);
   const [editedMainInfo, setEditedMainInfo] = useState({});
 
-  // УДАЛЕНО: состояния для модальных окон
-  // const [selectedDeclaration, setSelectedDeclaration] = useState(null);
-  // const [selectedInspection, setSelectedInspection] = useState(null);
-  // const [showDeclarationModal, setShowDeclarationModal] = useState(false);
-  // const [showInspectionModal, setShowInspectionModal] = useState(false);
-
   // Используем useCallback для стабильных функций
   const isSeniorInspector = React.useMemo(() => {
     return currentWorker?.role_id && [2, 3].includes(Number(currentWorker.role_id));
   }, [currentWorker]);
 
-  // ДОБАВИТЬ: Функции для проверки возможности клика
-  // Исправленные функции для проверки возможности клика
+  // Функции для проверки возможности клика
   const canClickDeclaration = useCallback((declaration) => {
-    // Любой инспектор может открывать декларации для просмотра
-    // Но изменять статус могут только в определенных условиях (определяется в модальном окне)
-    return true; // ВСЕГДА возвращаем true для возможности просмотра
+    return true;
   }, []);
 
   const canClickRequest = useCallback((request) => {
-    // Любой инспектор может открывать заявления для просмотра
-    // Но изменять статус могут только в определенных условиях (определяется в модальном окне)
-    return true; // ВСЕГДА возвращаем true для возможности просмотра
+    return true;
   }, []);
 
-  // ИЗМЕНЕНО: Разрешаем кликать по проверкам всем инспекторам
   const canClickInspection = useCallback((inspection) => {
-    // Любой инспектор может открывать проверки для просмотра
-    // Но редактировать могут только старшие инспекторы
-    return true; // ВСЕГДА возвращаем true для возможности просмотра
+    return true;
   }, []);
 
   // Инициализация редактируемых данных - ТОЛЬКО ПРИ ИЗМЕНЕНИИ taxpayer
@@ -147,23 +135,19 @@ const TaxpayerDetailView = ({
     });
   }, [taxpayer]);
 
-  // ИЗМЕНЕНО: упрощенный обработчик клика по декларации
+  // Упрощенный обработчик клика по декларации
   const handleDeclarationClick = useCallback((declarationId) => {
     if (onDeclarationClick) {
       onDeclarationClick(declarationId);
     }
   }, [onDeclarationClick]);
 
-  // ИЗМЕНЕНО: упрощенный обработчик клика по проверке
+  // Упрощенный обработчик клика по проверке
   const handleInspectionClick = useCallback((inspectionId) => {
     if (onInspectionClick) {
       onInspectionClick(inspectionId);
     }
   }, [onInspectionClick]);
-
-  // УДАЛЕНО: обработчики обновления статусов (теперь в родительском компоненте)
-  // const handleDeclarationStatusUpdate = useCallback(...)
-  // const handleInspectionUpdate = async (...)
 
   return (
     <div>
@@ -232,6 +216,12 @@ const TaxpayerDetailView = ({
             onClick={() => setActiveTab('inspections')}
           >
             Проверки
+          </button>
+          <button
+            className={`nav-link ${activeTab === 'accruals' ? 'active' : ''}`}
+            onClick={() => setActiveTab('accruals')}
+          >
+            Налоговые начисления
           </button>
         </div>
       </nav>
@@ -327,9 +317,16 @@ const TaxpayerDetailView = ({
             isSeniorInspector={isSeniorInspector}
           />
         )}
-      </div>
 
-      {/* УДАЛЕНО: модальные окна (перенесены в родительский компонент) */}
+        {/* Налоговые начисления */}
+        {activeTab === 'accruals' && (
+          <TaxAccrualsTab 
+            accruals={taxpayer.accruals || []} 
+            onAccrualClick={onAccrualClick} // ПЕРЕДАЕМ ФУНКЦИЮ КЛИКА
+            canEdit={isSeniorInspector}
+          />
+        )}
+      </div>
     </div>
   );
 };
@@ -424,19 +421,11 @@ const RequestsTab = ({ requests, onRequestClick, canClickRequest, canChangeStatu
     );
   }
 
-  // Отладочный вывод для первого заявления
-  console.log('First request object:', requests[0]);
-  console.log('Available keys in request:', Object.keys(requests[0]));
-
-  // Улучшенная функция для цветов статусов заявлений
   const getRequestStatusColor = (statusId) => {
-    console.log('Request status ID:', statusId, 'Type:', typeof statusId);
-    
     if (statusId === undefined || statusId === null) {
       return 'secondary';
     }
     
-    // Преобразуем в число, если это строка
     const id = typeof statusId === 'string' ? parseInt(statusId, 10) : statusId;
     
     switch (id) {
@@ -444,87 +433,82 @@ const RequestsTab = ({ requests, onRequestClick, canClickRequest, canChangeStatu
       case 2: return 'success';  // одобрено
       case 3: return 'danger';   // отклонено
       default: 
-        console.log('Unknown status ID:', id);
         return 'secondary';
     }
   };
 
   return (
     <div className="row">
-      {requests.map(request => {
-        console.log(`Request ${request.request_id} status:`, request.request_status_id, 'status name:', request.request_status_name);
-        
-        return (
-          <div 
-            key={request.request_id} 
-            className="col-12 mb-3"
-            onClick={() => canClickRequest(request) && onRequestClick(request.request_id)}
-            style={{ cursor: canClickRequest(request) ? 'pointer' : 'default' }}
-          >
-            <div className={`card border ${canClickRequest(request) ? 'hover-shadow' : ''}`}>
-              <div className="card-header bg-light">
-                <div className="d-flex justify-content-between align-items-center">
-                  <h6 className="mb-0">Заявление #{request.request_id}</h6>
-                  <span className={`badge bg-${getRequestStatusColor(request.request_status_id)}`}>
-                    {request.request_status_name || 'Неизвестный статус'}
-                  </span>
-                </div>
-              </div>
-              <div className="card-body">
-                <div className="row">
-                  <div className="col-md-6">
-                    <div className="mb-2">
-                      <strong>Дата подачи:</strong> {formatDate(request.send_date)}
-                    </div>
-                    <div className="mb-2">
-                      <strong>Основание для снижения:</strong> {request.reduce_base_name}
-                    </div>
-                    <div className="mb-2">
-                      <strong>Тип снижения:</strong> {request.reduce_type_name}
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-2">
-                      <strong>Запрошенная сумма:</strong> {formatCurrency(request.requested_reduce_amount)}
-                    </div>
-                    {request.verdict_date && (
-                      <div className="mb-2">
-                        <strong>Дата решения:</strong> {formatDate(request.verdict_date)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {request.full_description && (
-                  <div className="mt-3">
-                    <strong>Описание:</strong>
-                    <p className="mb-0">{request.full_description}</p>
-                  </div>
-                )}
-                {request.periods && request.periods.length > 0 && (
-                  <div className="mt-3">
-                    <strong>Периоды:</strong>
-                    <div className="d-flex flex-wrap gap-2 mt-2">
-                      {request.periods.map(period => (
-                        <span key={period.period_id} className="badge bg-secondary">
-                          {period.period_name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {canClickRequest(request) && (
-                  <div className="mt-3">
-                    <small className="text-muted">
-                      <i className="bi bi-hand-index me-1"></i>
-                      Нажмите для подробного просмотра{canChangeStatus && ' и изменения статуса'}
-                    </small>
-                  </div>
-                )}
+      {requests.map(request => (
+        <div 
+          key={request.request_id} 
+          className="col-12 mb-3"
+          onClick={() => canClickRequest(request) && onRequestClick(request.request_id)}
+          style={{ cursor: canClickRequest(request) ? 'pointer' : 'default' }}
+        >
+          <div className={`card border ${canClickRequest(request) ? 'hover-shadow' : ''}`}>
+            <div className="card-header bg-light">
+              <div className="d-flex justify-content-between align-items-center">
+                <h6 className="mb-0">Заявление #{request.request_id}</h6>
+                <span className={`badge bg-${getRequestStatusColor(request.request_status_id)}`}>
+                  {request.request_status_name || 'Неизвестный статус'}
+                </span>
               </div>
             </div>
+            <div className="card-body">
+              <div className="row">
+                <div className="col-md-6">
+                  <div className="mb-2">
+                    <strong>Дата подачи:</strong> {formatDate(request.send_date)}
+                  </div>
+                  <div className="mb-2">
+                    <strong>Основание для снижения:</strong> {request.reduce_base_name}
+                  </div>
+                  <div className="mb-2">
+                    <strong>Тип снижения:</strong> {request.reduce_type_name}
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="mb-2">
+                    <strong>Запрошенная сумма:</strong> {formatCurrency(request.requested_reduce_amount)}
+                  </div>
+                  {request.verdict_date && (
+                    <div className="mb-2">
+                      <strong>Дата решения:</strong> {formatDate(request.verdict_date)}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {request.full_description && (
+                <div className="mt-3">
+                  <strong>Описание:</strong>
+                  <p className="mb-0">{request.full_description}</p>
+                </div>
+              )}
+              {request.periods && request.periods.length > 0 && (
+                <div className="mt-3">
+                  <strong>Периоды:</strong>
+                  <div className="d-flex flex-wrap gap-2 mt-2">
+                    {request.periods.map(period => (
+                      <span key={period.period_id} className="badge bg-secondary">
+                        {period.period_name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {canClickRequest(request) && (
+                <div className="mt-3">
+                  <small className="text-muted">
+                    <i className="bi bi-hand-index me-1"></i>
+                    Нажмите для подробного просмотра{canChangeStatus && ' и изменения статуса'}
+                  </small>
+                </div>
+              )}
+            </div>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 };

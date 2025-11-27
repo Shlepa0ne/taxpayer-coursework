@@ -95,4 +95,7 @@ urlpatterns = [
     path('worker/all-inspections/', AllInspectionsListAPIView.as_view(), name='all-inspections'),
     path('worker/create-worker/', CreateWorkerAPIView.as_view(), name='create-worker'),
     path('worker/reset-worker-password/', ResetWorkerPasswordAPIView.as_view(), name='reset-worker-password'),
+
+    path('worker/taxpayer/<int:taxpayer_id>/accruals/', TaxAccrualsListAPIView.as_view(), name='taxpayer-accruals'),
+    path('worker/accruals/<int:accrual_id>/update/', UpdateTaxAccrualAPIView.as_view(), name='update-tax-accrual'),
 ]
