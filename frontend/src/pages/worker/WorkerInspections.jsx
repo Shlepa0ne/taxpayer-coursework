@@ -7,12 +7,15 @@ import {
   getAvailableOfficers,
   searchTaxpayers,
   getInspectionBases,
-  getInspectionTypes} from '../../api/workersApi';
+  getInspectionTypes,
+  getAllInspections // НОВЫЙ МЕТОД - нужно добавить в API
+} from '../../api/workersApi';
 import Spinner from '../../components/ui/Spinner';
 import InspectionDetailModal from './components/InspectionDetailModal';
 
 const WorkerInspections = () => {
-  const [inspections, setInspections] = useState([]);
+  const [myInspections, setMyInspections] = useState([]);
+  const [allInspections, setAllInspections] = useState([]); // НОВОЕ СОСТОЯНИЕ
   const [workerData, setWorkerData] = useState(null);
   const [availableOfficers, setAvailableOfficers] = useState([]);
   const [inspectionBases, setInspectionBases] = useState([]);
@@ -22,6 +25,8 @@ const WorkerInspections = () => {
   const [selectedInspection, setSelectedInspection] = useState(null);
   const [taxpayerSearchResults, setTaxpayerSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('my'); // НОВОЕ СОСТОЯНИЕ для табов
+
   const [formData, setFormData] = useState({
     taxpayer_inn: '',
     inspection_date: '',
@@ -37,7 +42,7 @@ const WorkerInspections = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [inspectionsData, workerData, officersData, basesData, typesData] = await Promise.all([
+      const [myInspectionsData, workerData, officersData, basesData, typesData] = await Promise.all([
         getWorkerInspections(),
         getCurrentWorker(),
         getAvailableOfficers(),
@@ -45,18 +50,28 @@ const WorkerInspections = () => {
         getInspectionTypes()
       ]);
       
-      console.log('Inspections data:', inspectionsData);
-      console.log('Inspection bases:', basesData);
-      console.log('Inspection types:', typesData);
+      console.log('My inspections data:', myInspectionsData);
+      console.log('Worker data:', workerData);
       
-      // СОРТИРОВКА ПРОВЕРОК
-      const sortedInspections = sortInspections(inspectionsData);
-      setInspections(sortedInspections);
+      // СОРТИРОВКА МОИХ ПРОВЕРОК
+      const sortedMyInspections = sortInspections(myInspectionsData);
+      setMyInspections(sortedMyInspections);
       
       setWorkerData(workerData);
       setAvailableOfficers(officersData);
       setInspectionBases(basesData);
       setInspectionTypes(typesData);
+
+      // ЕСЛИ СОТРУДНИК - СТАРШИЙ ИНСПЕКТОР ИЛИ РУКОВОДИТЕЛЬ, ЗАГРУЖАЕМ ВСЕ ПРОВЕРКИ
+      if (workerData?.role_id >= 2) {
+        try {
+          const allInspectionsData = await getAllInspections();
+          const sortedAllInspections = sortInspections(allInspectionsData);
+          setAllInspections(sortedAllInspections);
+        } catch (error) {
+          console.error('Error fetching all inspections:', error);
+        }
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
       alert('Ошибка загрузки данных');
@@ -77,15 +92,13 @@ const WorkerInspections = () => {
       const isAFuture = dateA >= now;
       const isBFuture = dateB >= now;
       
-      if (isAFuture && !isBFuture) return -1; // A будущая, B прошедшая - A идет первой
-      if (!isAFuture && isBFuture) return 1;  // A прошедшая, B будущая - B идет первой
+      if (isAFuture && !isBFuture) return -1;
+      if (!isAFuture && isBFuture) return 1;
       
-      // Если обе будущие - сортируем по возрастанию (ближайшие сначала)
       if (isAFuture && isBFuture) {
         return dateA - dateB;
       }
       
-      // Если обе прошедшие - сортируем по убыванию (последние сначала)
       return dateB - dateA;
     });
   };
@@ -203,7 +216,79 @@ const WorkerInspections = () => {
     return reason ? reason.name : `Причина (${reasonId})`;
   };
 
+  // ФУНКЦИЯ ДЛЯ РЕНДЕРИНГА ТАБЛИЦЫ ПРОВЕРОК
+  const renderInspectionsTable = (inspections, showActions = true) => {
+    if (inspections.length === 0) {
+      return (
+        <div className="text-center py-4">
+          <i className="bi bi-clipboard-x display-4 text-muted"></i>
+          <p className="mt-3 text-muted">Нет проверок</p>
+        </div>
+      );
+    }
+
   if (loading) return <Spinner />;
+
+  return (
+      <div className="table-responsive">
+        <table className="table table-hover">
+          <thead>
+            <tr>
+              <th>Дата и время проверки</th>
+              <th>Налогоплательщик</th>
+              <th>Тип проверки</th>
+              <th>Причина</th>
+              <th>Статус</th>
+              {showActions && <th>Действия</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {inspections.map((inspection) => {
+              const status = getInspectionStatus(inspection.inspection_type_status_id);
+              return (
+                <tr key={inspection.inspection_id}>
+                  <td>{new Date(inspection.inspection_date).toLocaleString('ru-RU', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}</td>
+                  <td>
+                    {inspection.taxpayer?.fio || inspection.taxpayer?.full_name || inspection.taxpayer?.short_name}
+                    <br />
+                    <small className="text-muted">ИНН: {inspection.taxpayer?.inn}</small>
+                  </td>
+                  <td>{getInspectionTypeName(inspection.inspection_type_id)}</td>
+                  <td>{getInspectionReasonName(inspection.inspection_reason)}</td>
+                  <td>
+                    <span className={`badge bg-${status.color}`}>
+                      {status.text}
+                    </span>
+                  </td>
+                  {showActions && (
+                    <td>
+                      <button 
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={() => setSelectedInspection(inspection)}
+                      >
+                        <i className="bi bi-eye"></i>
+                        Подробнее
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  if (loading) return <Spinner />;
+
+  const isSeniorOrManager = workerData?.role_id >= 2;
 
   return (
     <div>
@@ -222,67 +307,41 @@ const WorkerInspections = () => {
 
       <div className="card">
         <div className="card-header">
-          <h5 className="card-title mb-0">Мои проверки</h5>
+          {/* ТАБЫ ДЛЯ СТАРШИХ ИНСПЕКТОРОВ И РУКОВОДИТЕЛЕЙ */}
+          {isSeniorOrManager ? (
+            <ul className="nav nav-tabs card-header-tabs">
+              <li className="nav-item">
+                <button 
+                  className={`nav-link ${activeTab === 'my' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('my')}
+                >
+                  Мои проверки ({myInspections.length})
+                </button>
+              </li>
+              <li className="nav-item">
+                <button 
+                  className={`nav-link ${activeTab === 'all' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('all')}
+                >
+                  Все проверки ({allInspections.length})
+                </button>
+              </li>
+            </ul>
+          ) : (
+            <h5 className="card-title mb-0">Мои проверки</h5>
+          )}
         </div>
         <div className="card-body">
-          {inspections.length === 0 ? (
-            <div className="text-center py-4">
-              <i className="bi bi-clipboard-x display-4 text-muted"></i>
-              <p className="mt-3 text-muted">Нет назначенных проверок</p>
-            </div>
+          {/* ОТОБРАЖЕНИЕ В ЗАВИСИМОСТИ ОТ АКТИВНОЙ ВКЛАДКИ */}
+          {isSeniorOrManager ? (
+            activeTab === 'my' ? (
+              renderInspectionsTable(myInspections, true)
+            ) : (
+              renderInspectionsTable(allInspections, true)
+            )
           ) : (
-            <div className="table-responsive">
-              <table className="table table-hover">
-                <thead>
-                  <tr>
-                    <th>Дата и время проверки</th> {/* ИЗМЕНИЛИ НАЗВАНИЕ КОЛОНКИ */}
-                    <th>Налогоплательщик</th>
-                    <th>Тип проверки</th>
-                    <th>Причина</th>
-                    <th>Статус</th>
-                    <th>Действия</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inspections.map((inspection) => {
-                    const status = getInspectionStatus(inspection.inspection_type_status_id);
-                    return (
-                      <tr key={inspection.inspection_id}>
-                        {/* ИЗМЕНИЛИ ОТОБРАЖЕНИЕ ДАТЫ НА ПОЛНУЮ ДАТУ И ВРЕМЯ */}
-                        <td>{new Date(inspection.inspection_date).toLocaleString('ru-RU', {
-                          year: 'numeric',
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}</td>
-                        <td>
-                          {inspection.taxpayer?.fio || inspection.taxpayer?.full_name || inspection.taxpayer?.short_name}
-                          <br />
-                          <small className="text-muted">ИНН: {inspection.taxpayer?.inn}</small>
-                        </td>
-                        <td>{getInspectionTypeName(inspection.inspection_type_id)}</td>
-                        <td>{getInspectionReasonName(inspection.inspection_reason)}</td>
-                        <td>
-                          <span className={`badge bg-${status.color}`}>
-                            {status.text}
-                          </span>
-                        </td>
-                        <td>
-                          <button 
-                            className="btn btn-sm btn-outline-primary"
-                            onClick={() => setSelectedInspection(inspection)}
-                          >
-                            <i className="bi bi-eye"></i>
-                            Подробнее
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            // ДЛЯ ОБЫЧНЫХ ИНСПЕКТОРОВ - ТОЛЬКО СВОИ ПРОВЕРКИ
+            renderInspectionsTable(myInspections, true)
           )}
         </div>
       </div>
@@ -472,6 +531,8 @@ const WorkerInspections = () => {
           workerData={workerData}
           inspectionBases={inspectionBases}
           inspectionTypes={inspectionTypes}
+          availableOfficers={availableOfficers}
+          isSeniorOrManager={isSeniorOrManager}
         />
       )}
     </div>

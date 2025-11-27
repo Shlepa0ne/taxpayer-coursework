@@ -102,6 +102,16 @@ const WorkersDashboardHome = () => {
       }
     ];
 
+    // Действия для всех инспекторов (включая обычных) - ДОБАВЛЕНО ПРОВЕРКИ
+    const inspectorActions = [
+      {
+        to: '/worker/inspections',
+        label: 'Проверки',
+        icon: 'bi-clipboard-check',
+        color: 'outline-danger'
+      }
+    ];
+
     // Действия для старших инспекторов и руководителей
     const seniorActions = roleId >= 2 ? [
       {
@@ -109,12 +119,6 @@ const WorkersDashboardHome = () => {
         label: 'Регистрация плательщика',
         icon: 'bi-person-badge',
         color: 'outline-success'
-      },
-      {
-        to: '/worker/inspections',
-        label: 'Проверки',
-        icon: 'bi-clipboard-check',
-        color: 'outline-danger'
       }
     ] : [];
 
@@ -136,14 +140,14 @@ const WorkersDashboardHome = () => {
 
     // Комбинируем действия в зависимости от роли
     if (roleId === 1) {
-      // Инспектор - только базовые действия
-      return baseActions;
+      // Инспектор - базовые действия + проверки
+      return [...baseActions, ...inspectorActions];
     } else if (roleId === 2) {
-      // Старший инспектор - базовые + дополнительные
-      return [...baseActions, ...seniorActions];
+      // Старший инспектор - базовые + проверки + дополнительные
+      return [...baseActions, ...inspectorActions, ...seniorActions];
     } else if (roleId === 3) {
       // Руководитель - все действия
-      return [...baseActions, ...seniorActions, ...managerActions];
+      return [...baseActions, ...inspectorActions, ...seniorActions, ...managerActions];
     }
 
     return baseActions;
@@ -251,7 +255,7 @@ const WorkersDashboardHome = () => {
                 на рассмотрении
               </div>
               <Link to="/worker/declarations" className="btn btn-info btn-sm text-white">
-                Просмотреть
+                Рассмотреть
               </Link>
             </div>
           </div>
@@ -274,12 +278,9 @@ const WorkersDashboardHome = () => {
                 предстоящих
               </div>
               {dashboardData.upcomingInspections > 0 ? (
-                <div className="alert alert-warning mt-2 mb-0 p-2">
-                  <small>
-                    <i className="bi bi-exclamation-triangle me-1"></i>
-                    Требуется планирование
-                  </small>
-                </div>
+                <Link to="/worker/inspections" className="btn btn-danger btn-sm text-white">
+                  Посмотреть
+                </Link>
               ) : (
                 <div className="alert alert-success mt-2 mb-0 p-2">
                   <small>

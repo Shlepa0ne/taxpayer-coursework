@@ -49,7 +49,7 @@ const WorkersDashboardPage = () => {
 
     const roleId = workerData.role_id;
     
-    // Базовые пункты меню для всех ролей
+    // Базовые пункты меню для всех ролей (включая обычных инспекторов)
     const baseMenuItems = (
       <>
         <li className="nav-item mb-2">
@@ -88,6 +88,16 @@ const WorkersDashboardPage = () => {
             Декларации
           </Link>
         </li>
+        {/* ДОБАВЛЕНО: Пункт "Проверки" для всех инспекторов */}
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker/inspections" 
+            className={`nav-link ${isActive('/worker/inspections') ? 'active' : ''}`}
+          >
+            <i className="bi bi-clipboard-check me-2"></i>
+            Проверки
+          </Link>
+        </li>
       </>
     );
 
@@ -101,15 +111,6 @@ const WorkersDashboardPage = () => {
           >
             <i className="bi bi-person-badge me-2"></i>
             Работа с аккаунтами налогоплательщиков
-          </Link>
-        </li>
-        <li className="nav-item mb-2">
-          <Link 
-            to="/worker/inspections" 
-            className={`nav-link ${isActive('/worker/inspections') ? 'active' : ''}`}
-          >
-            <i className="bi bi-clipboard-check me-2"></i>
-            Проверки
           </Link>
         </li>
       </>

@@ -2146,3 +2146,57 @@ class UpdateInspectionStatusAPIView(APIView):
             return Response({'message': 'Статус проверки обновлен'})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+        
+class AllInspectionsListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        try:
+            # Проверяем, является ли сотрудник старшим инспектором или руководителем
+            user_inn = request.user.username
+            worker_auth = WorkerAuth.objects.get(inn=user_inn)
+            
+            if not worker_auth.tax_officer or worker_auth.tax_officer.role_id < 2:
+                return Response(
+                    {'error': 'Недостаточно прав для просмотра всех проверок'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Получаем все проверки
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT DISTINCT i.inspection_id, i.inspection_date, i.inspection_type_id, 
+                           i.inspection_reason, i.inspection_type_status_id,
+                           t.taxpayer_id, t.inn, t.fio, t.full_name, t.short_name
+                    FROM inspection i
+                    INNER JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
+                    ORDER BY i.inspection_date DESC
+                """)
+                results = cursor.fetchall()
+            
+            inspections = []
+            for row in results:
+                inspection = {
+                    'inspection_id': row[0],
+                    'inspection_date': row[1],
+                    'inspection_type_id': row[2],
+                    'inspection_reason': row[3],
+                    'inspection_type_status_id': row[4],
+                    'taxpayer': {
+                        'taxpayer_id': row[5],
+                        'inn': row[6],
+                        'fio': row[7],
+                        'full_name': row[8],
+                        'short_name': row[9]
+                    }
+                }
+                inspections.append(inspection)
+            
+            return Response(inspections)
+                
+        except WorkerAuth.DoesNotExist:
+            return Response([])
+        except Exception as e:
+            print(f"Error in AllInspectionsListAPIView: {e}")
+            return Response({'error': str(e)}, status=500)

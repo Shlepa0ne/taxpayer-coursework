@@ -1,3 +1,4 @@
+// frontend/src/pages/worker/components/InspectionDetailModal.jsx
 import { useState, useEffect } from 'react';
 import { 
   getInspectionDetail,
@@ -6,12 +7,22 @@ import {
   getInspectionViolations,
   createViolation,
   updateViolation,
-  deleteViolation
+  deleteViolation,
+  updateInspection, // НОВЫЙ ИМПОРТ
+  updateInspectionStatus // НОВЫЙ ИМПОРТ
 } from '../../../api/workersApi';
 import Spinner from '../../../components/ui/Spinner';
 
-// Компонент модального окна деталей проверки
-const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, inspectionBases, inspectionTypes }) => {
+const InspectionDetailModal = ({ 
+  inspection, 
+  onClose, 
+  onUpdate, 
+  workerData, 
+  inspectionBases, 
+  inspectionTypes,
+  availableOfficers,
+  isSeniorOrManager 
+}) => {
   const [inspectionDetail, setInspectionDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [violations, setViolations] = useState([]);
@@ -19,6 +30,14 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, insp
   const [taxPeriods, setTaxPeriods] = useState([]);
   const [showAddViolation, setShowAddViolation] = useState(false);
   const [editingViolation, setEditingViolation] = useState(null);
+  const [editMode, setEditMode] = useState(false); // НОВОЕ СОСТОЯНИЕ
+  const [inspectionForm, setInspectionForm] = useState({ // НОВОЕ СОСТОЯНИЕ
+    inspection_date: '',
+    inspection_type_id: '',
+    inspection_reason: '',
+    participants: []
+  });
+
   const [violationForm, setViolationForm] = useState({
     violation_type_id: '',
     sum_to_pay: '',
@@ -40,6 +59,14 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, insp
         await fetchViolationTypes();
         await fetchTaxPeriods();
       }
+
+      // Заполняем форму данными проверки
+      setInspectionForm({
+        inspection_date: data.inspection_date,
+        inspection_type_id: data.inspection_type_id,
+        inspection_reason: data.inspection_reason,
+        participants: data.participants.map(p => p.tax_officer_id)
+      });
     } catch (error) {
       console.error('Error fetching inspection detail:', error);
       alert('Ошибка загрузки деталей проверки');
@@ -88,6 +115,44 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, insp
   const canAddViolations = () => {
     return isInspectionCompleted(inspectionDetail);
   };
+
+  // НОВАЯ ФУНКЦИЯ - может ли пользователь редактировать проверку
+  const canEditInspection = () => {
+    return isSeniorOrManager && !isInspectionCompleted(inspectionDetail);
+  };
+
+  // НОВАЯ ФУНКЦИЯ - обновление проверки
+  const handleUpdateInspection = async (e) => {
+    e.preventDefault();
+    try {
+      await updateInspection(inspectionDetail.inspection_id, inspectionForm);
+      setEditMode(false);
+      await fetchInspectionDetail(); // Перезагружаем данные
+      onUpdate(); // Обновляем список проверок
+      alert('Проверка успешно обновлена!');
+    } catch (error) {
+      console.error('Error updating inspection:', error);
+      alert('Ошибка при обновлении проверки');
+    }
+  };
+
+  // НОВАЯ ФУНКЦИЯ - обновление статуса проверки
+  const handleUpdateStatus = async (newStatusId) => {
+    try {
+      await updateInspectionStatus(inspectionDetail.inspection_id, {
+        inspection_type_status_id: newStatusId
+      });
+      await fetchInspectionDetail();
+      onUpdate();
+      alert('Статус проверки обновлен!');
+    } catch (error) {
+      console.error('Error updating inspection status:', error);
+      alert('Ошибка при обновлении статуса проверки');
+    }
+  };
+
+  // ОСТАЛЬНЫЕ ФУНКЦИИ (handleAddViolation, handleEditViolation и т.д.) остаются без изменений
+  // ... (остальной код обработки нарушений)
 
   const handleAddViolation = async (e) => {
     e.preventDefault();
@@ -193,6 +258,7 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, insp
 
   const status = getInspectionStatus(inspectionDetail.inspection_type_status_id);
   const canAddViolationsFlag = canAddViolations();
+  const canEditInspectionFlag = canEditInspection();
 
   return (
     <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -211,20 +277,153 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, insp
             </div>
           </div>
           <div className="modal-body">
+            
+            {/* КНОПКИ УПРАВЛЕНИЯ ДЛЯ СТАРШИХ ИНСПЕКТОРОВ */}
+            {isSeniorOrManager && (
+              <div className="mb-4 p-3 bg-light rounded">
+                <h6>Управление проверкой</h6>
+                <div className="d-flex gap-2 flex-wrap">
+                  {canEditInspectionFlag && (
+                    <button 
+                      className={`btn ${editMode ? 'btn-secondary' : 'btn-outline-primary'}`}
+                      onClick={() => setEditMode(!editMode)}
+                    >
+                      <i className="bi bi-pencil me-1"></i>
+                      {editMode ? 'Отменить редактирование' : 'Редактировать проверку'}
+                    </button>
+                  )}
+                  
+                  {/* КНОПКИ СМЕНЫ СТАТУСА */}
+                  {inspectionDetail.inspection_type_status_id === 1 && (
+                    <button 
+                      className="btn btn-outline-info"
+                      onClick={() => handleUpdateStatus(2)}
+                    >
+                      Начать проверку
+                    </button>
+                  )}
+                  {inspectionDetail.inspection_type_status_id === 2 && (
+                    <button 
+                      className="btn btn-outline-success"
+                      onClick={() => handleUpdateStatus(3)}
+                    >
+                      Завершить проверку
+                    </button>
+                  )}
+                  {(inspectionDetail.inspection_type_status_id === 1 || inspectionDetail.inspection_type_status_id === 2) && (
+                    <button 
+                      className="btn btn-outline-danger"
+                      onClick={() => {
+                        if (window.confirm('Вы уверены, что хотите отменить проверку?')) {
+                          handleUpdateStatus(4);
+                        }
+                      }}
+                    >
+                      Отменить проверку
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="row">
               <div className="col-md-6">
                 <h6>Основная информация</h6>
-                {/* ИЗМЕНИЛИ ОТОБРАЖЕНИЕ ДАТЫ НА ПОЛНУЮ ДАТУ И ВРЕМЯ */}
-                <p><strong>Дата и время:</strong> {new Date(inspectionDetail.inspection_date).toLocaleString('ru-RU', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}</p>
-                <p><strong>Тип:</strong> {getInspectionTypeName(inspectionDetail.inspection_type_id)}</p>
-                <p><strong>Причина:</strong> {getInspectionReasonName(inspectionDetail.inspection_reason)}</p>
+                
+                {editMode ? (
+                  // ФОРМА РЕДАКТИРОВАНИЯ
+                  <form onSubmit={handleUpdateInspection}>
+                    <div className="mb-3">
+                      <label className="form-label">Дата и время проверки *</label>
+                      <input
+                        type="datetime-local"
+                        className="form-control"
+                        value={inspectionForm.inspection_date ? new Date(inspectionForm.inspection_date).toISOString().slice(0, 16) : ''}
+                        onChange={(e) => setInspectionForm({...inspectionForm, inspection_date: e.target.value})}
+                        required
+                      />
+                    </div>
+                    
+                    <div className="mb-3">
+                      <label className="form-label">Тип проверки *</label>
+                      <select
+                        className="form-select"
+                        value={inspectionForm.inspection_type_id}
+                        onChange={(e) => setInspectionForm({...inspectionForm, inspection_type_id: parseInt(e.target.value)})}
+                        required
+                      >
+                        {inspectionTypes.map(type => (
+                          <option key={type.id} value={type.id}>{type.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div className="mb-3">
+                      <label className="form-label">Причина проверки *</label>
+                      <select
+                        className="form-select"
+                        value={inspectionForm.inspection_reason}
+                        onChange={(e) => setInspectionForm({...inspectionForm, inspection_reason: parseInt(e.target.value)})}
+                        required
+                      >
+                        {inspectionBases.map(base => (
+                          <option key={base.id} value={base.id}>{base.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div className="mb-3">
+                      <label className="form-label">Участники проверки</label>
+                      <select
+                        className="form-select"
+                        multiple
+                        size="4"
+                        value={inspectionForm.participants}
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.selectedOptions, option => parseInt(option.value));
+                          setInspectionForm({...inspectionForm, participants: selected});
+                        }}
+                      >
+                        {availableOfficers.map(officer => (
+                          <option key={officer.tax_officer_id} value={officer.tax_officer_id}>
+                            {officer.tax_officer_name} ({officer.unit})
+                          </option>
+                        ))}
+                      </select>
+                      <small className="text-muted">
+                        Для выбора нескольких участников удерживайте Ctrl (Cmd на Mac)
+                      </small>
+                    </div>
+                    
+                    <div className="d-flex gap-2">
+                      <button type="submit" className="btn btn-success">
+                        Сохранить изменения
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary" 
+                        onClick={() => setEditMode(false)}
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  // ОТОБРАЖЕНИЕ ИНФОРМАЦИИ
+                  <>
+                    <p><strong>Дата и время:</strong> {new Date(inspectionDetail.inspection_date).toLocaleString('ru-RU', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}</p>
+                    <p><strong>Тип:</strong> {getInspectionTypeName(inspectionDetail.inspection_type_id)}</p>
+                    <p><strong>Причина:</strong> {getInspectionReasonName(inspectionDetail.inspection_reason)}</p>
+                  </>
+                )}
               </div>
+              
               <div className="col-md-6">
                 <h6>Налогоплательщик</h6>
                 <p><strong>ИНН:</strong> {inspectionDetail.taxpayer?.inn}</p>
@@ -243,6 +442,9 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, insp
                     {inspectionDetail.participants.map(participant => (
                       <li key={participant.tax_officer_id} className="list-group-item">
                         {participant.tax_officer_name} ({participant.unit})
+                        {participant.tax_officer_id === workerData?.tax_officer_id && (
+                          <span className="badge bg-primary ms-2">Вы</span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -250,6 +452,7 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, insp
                   <p className="text-muted">Участники не назначены</p>
                 )}
               </div>
+              
               <div className="col-md-6">
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <h6 className="mb-0">Выявленные нарушения</h6>
@@ -264,6 +467,7 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, insp
                   )}
                 </div>
 
+                {/* ФОРМА ДОБАВЛЕНИЯ/РЕДАКТИРОВАНИЯ НАРУШЕНИЙ */}
                 {showAddViolation && (
                   <div className="card mb-3">
                     <div className="card-body">
@@ -327,6 +531,7 @@ const InspectionDetailModal = ({ inspection, onClose, onUpdate, workerData, insp
                   </div>
                 )}
 
+                {/* ТАБЛИЦА НАРУШЕНИЙ */}
                 {violations.length === 0 ? (
                   <p className="text-muted">Нарушения не выявлены</p>
                 ) : (

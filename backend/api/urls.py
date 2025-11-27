@@ -92,4 +92,5 @@ urlpatterns = [
     path('worker/violations/<int:violation_id>/', UpdateViolationAPIView.as_view(), name='update-violation'),
     path('worker/violations/<int:violation_id>/delete/', DeleteViolationAPIView.as_view(), name='delete-violation'),
     path('worker/inspections/<int:inspection_id>/update-status/', UpdateInspectionStatusAPIView.as_view(), name='update-inspection-status'),
+    path('worker/all-inspections/', AllInspectionsListAPIView.as_view(), name='all-inspections'),
 ]
