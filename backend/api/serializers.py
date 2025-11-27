@@ -921,3 +921,50 @@ class TaxRegimeSerializer(serializers.ModelSerializer):
     class Meta:
         model = TaxRegime
         fields = ['regime_id', 'name', 'description']
+
+class WorkerSearchSerializer(serializers.ModelSerializer):
+    role_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TaxOfficer
+        fields = [
+            'tax_officer_id',  # Для внутреннего использования
+            'tax_officer_name', 
+            'unit', 
+            'role_id', 
+            'role_name'
+        ]
+    
+    def get_role_name(self, obj):
+        role_map = {
+            1: "Инспектор",
+            2: "Старший инспектор",
+            3: "Руководитель"
+        }
+        return role_map.get(obj.role_id, "Неизвестно")
+
+class WorkerDetailSerializer(serializers.ModelSerializer):
+    role_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TaxOfficer
+        fields = [
+            'tax_officer_id',  # Для внутреннего использования
+            'tax_officer_name', 
+            'unit', 
+            'role_id', 
+            'role_name'
+        ]
+    
+    def get_role_name(self, obj):
+        role_map = {
+            1: "Инспектор",
+            2: "Старший инспектор",
+            3: "Руководитель"
+        }
+        return role_map.get(obj.role_id, "Неизвестно")
+
+class WorkerUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaxOfficer
+        fields = ['tax_officer_name', 'unit', 'role_id']

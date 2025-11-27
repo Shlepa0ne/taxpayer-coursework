@@ -131,6 +131,12 @@ const WorkersDashboardHome = () => {
         color: 'outline-success'
       },
       {
+        to: '/worker/search-workers',
+        label: 'Поиск сотрудников',
+        icon: 'bi-search-heart',
+        color: 'outline-info'
+      },
+      {
         to: '/worker/add-worker',
         label: 'Регистрация сотрудника',
         icon: 'bi-person-plus',

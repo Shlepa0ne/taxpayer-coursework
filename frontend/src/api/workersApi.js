@@ -318,3 +318,21 @@ export const updateTaxAccrual = async (accrualId, updateData) => {
   const { data } = await axiosInstance.patch(`/worker/accruals/${accrualId}/update/`, updateData);
   return data;
 };
+
+// Поиск сотрудников
+export const searchWorkers = async (searchParams) => {
+  const { data } = await axiosInstance.get('/worker/worker-search/', { params: searchParams });
+  return data;
+};
+
+// Получить детальную информацию о сотруднике
+export const getWorkerDetail = async (workerId) => {
+  const { data } = await axiosInstance.get(`/worker/worker-detail/${workerId}/`);
+  return data;
+};
+
+// Обновить информацию о сотруднике
+export const updateWorkerInfo = async (workerId, workerData) => {
+  const { data } = await axiosInstance.patch(`/worker/worker-detail/${workerId}/`, workerData);
+  return data;
+};

@@ -2533,3 +2533,84 @@ class UpdateTaxAccrualAPIView(APIView):
             return Response({'error': 'Сотрудник не найден'}, status=404)
         except Exception as e:
             return Response({'error': f'Ошибка при обновлении начисления: {str(e)}'}, status=500)
+        
+class WorkerSearchAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request):
+        search_type = request.query_params.get('type', 'simple')
+        query = request.query_params.get('query', '')
+        
+        if search_type == 'simple':
+            return self.simple_search(query)
+        elif search_type == 'advanced':
+            return self.advanced_search(request.query_params)
+        else:
+            return Response({'error': 'Неверный тип поиска'}, status=400)
+
+    def simple_search(self, query):
+        if not query:
+            return Response({'error': 'Пустой запрос'}, status=400)
+        
+        try:
+            # Ищем только по полям таблицы tax_officer
+            workers = TaxOfficer.objects.filter(
+                models.Q(tax_officer_name__icontains=query) |
+                models.Q(unit__icontains=query)
+            )[:100]
+            
+            serializer = WorkerSearchSerializer(workers, many=True)
+            return Response({'results': serializer.data})
+            
+        except Exception as e:
+            print(f"Error in worker search: {str(e)}")
+            return Response({'error': f'Ошибка поиска: {str(e)}'}, status=500)
+
+    def advanced_search(self, params):
+        try:
+            queryset = TaxOfficer.objects.all()
+            
+            if params.get('tax_officer_name'):
+                queryset = queryset.filter(tax_officer_name__icontains=params['tax_officer_name'])
+            
+            if params.get('unit'):
+                queryset = queryset.filter(unit__icontains=params['unit'])
+            
+            if params.get('role_id'):
+                queryset = queryset.filter(role_id=params['role_id'])
+            
+            # Убираем поиск по ИНН, так как его нет в tax_officer
+            
+            workers = queryset[:100]
+            serializer = WorkerSearchSerializer(workers, many=True)
+            return Response({'results': serializer.data})
+            
+        except Exception as e:
+            print(f"Error in advanced worker search: {str(e)}")
+            return Response({'error': f'Ошибка расширенного поиска: {str(e)}'}, status=500)
+
+class WorkerDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def get(self, request, worker_id):
+        try:
+            worker = TaxOfficer.objects.get(tax_officer_id=worker_id)
+            serializer = WorkerDetailSerializer(worker)
+            return Response(serializer.data)
+        except TaxOfficer.DoesNotExist:
+            return Response({'error': 'Сотрудник не найден'}, status=404)
+
+    def patch(self, request, worker_id):
+        try:
+            worker = TaxOfficer.objects.get(tax_officer_id=worker_id)
+            serializer = WorkerUpdateSerializer(worker, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=400)
+            
+        except TaxOfficer.DoesNotExist:
+            return Response({'error': 'Сотрудник не найден'}, status=404)

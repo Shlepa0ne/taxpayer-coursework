@@ -24,6 +24,7 @@ import WorkerAddWorker from './pages/worker/WorkerAddWorker';
 import WorkerAddTaxpayer from './pages/worker/WorkerAddTaxpayer';
 import WorkerProfile from './pages/worker/WorkerProfile';
 import WorkerInspections from './pages/worker/WorkerInspections';
+import WorkerSearchPage from './pages/worker/WorkerSearchPage';
 
 // Компонент-обертка для защиты роутов
 function ProtectedRoute({ children }) {
@@ -138,6 +139,15 @@ function App() {
             </WorkerRoleRoute>
           } 
         />
+
+        <Route 
+        path="search-workers" 
+        element={
+          <WorkerRoleRoute allowedRoles={[3]}>
+            <WorkerSearchPage />
+          </WorkerRoleRoute>
+        } 
+      />
       </Route>
       
       {/* Личный кабинет налогоплательщика */}

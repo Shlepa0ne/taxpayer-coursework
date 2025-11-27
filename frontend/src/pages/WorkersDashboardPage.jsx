@@ -88,7 +88,6 @@ const WorkersDashboardPage = () => {
             Декларации
           </Link>
         </li>
-        {/* ДОБАВЛЕНО: Пункт "Проверки" для всех инспекторов */}
         <li className="nav-item mb-2">
           <Link 
             to="/worker/inspections" 
@@ -126,6 +125,15 @@ const WorkersDashboardPage = () => {
           >
             <i className="bi bi-graph-up me-2"></i>
             Отчётность
+          </Link>
+        </li>
+        <li className="nav-item mb-2">
+          <Link 
+            to="/worker/search-workers" 
+            className={`nav-link ${isActive('/worker/search-workers') ? 'active' : ''}`}
+          >
+            <i className="bi bi-search-heart me-2"></i>
+            Поиск сотрудников
           </Link>
         </li>
         <li className="nav-item mb-2">

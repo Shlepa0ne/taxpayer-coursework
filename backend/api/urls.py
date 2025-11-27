@@ -98,4 +98,7 @@ urlpatterns = [
 
     path('worker/taxpayer/<int:taxpayer_id>/accruals/', TaxAccrualsListAPIView.as_view(), name='taxpayer-accruals'),
     path('worker/accruals/<int:accrual_id>/update/', UpdateTaxAccrualAPIView.as_view(), name='update-tax-accrual'),
+
+    path('worker/worker-search/', WorkerSearchAPIView.as_view(), name='worker-search'),
+    path('worker/worker-detail/<int:worker_id>/', WorkerDetailAPIView.as_view(), name='worker-detail'),
 ]
