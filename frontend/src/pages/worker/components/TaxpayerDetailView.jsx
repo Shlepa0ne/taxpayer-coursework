@@ -37,9 +37,12 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
     return true; // ВСЕГДА возвращаем true для возможности просмотра
   }, []);
 
+  // ИЗМЕНЕНО: Разрешаем кликать по проверкам всем инспекторам
   const canClickInspection = useCallback((inspection) => {
-    return isSeniorInspector && inspection.inspection_type_status_id === 1; // Можно кликать только на запланированные проверки
-  }, [isSeniorInspector]);
+    // Любой инспектор может открывать проверки для просмотра
+    // Но редактировать могут только старшие инспекторы
+    return true; // ВСЕГДА возвращаем true для возможности просмотра
+  }, []);
 
   // Инициализация редактируемых данных - ТОЛЬКО ПРИ ИЗМЕНЕНИИ taxpayer
   useEffect(() => {
@@ -344,6 +347,7 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
             inspections={taxpayer.inspections || []} 
             onInspectionClick={handleInspectionClick}
             canClickInspection={canClickInspection}
+            isSeniorInspector={isSeniorInspector} // ДОБАВЛЕНО: передаем информацию о правах
           />
         )}
       </div>
@@ -373,6 +377,7 @@ const TaxpayerDetailView = ({ taxpayer, onRequestClick, canChangeStatus, onTaxpa
           onUpdate={handleInspectionUpdate}
           isUpdating={false}
           canChangeStatus={canChangeStatus}
+          isSeniorOrManager={isSeniorInspector} // ДОБАВЛЕНО: передаем права
         />
       )}
     </div>
@@ -577,7 +582,7 @@ const RequestsTab = ({ requests, onRequestClick, canClickRequest, canChangeStatu
   );
 };
 
-const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection }) => {
+const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection, isSeniorInspector }) => {
   if (inspections.length === 0) {
     return (
       <div className="text-center text-muted py-4">
@@ -688,7 +693,7 @@ const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection }) 
             Завершенные проверки ({pastInspections.length})
           </h5>
           <div className="table-responsive">
-            <table className="table table-striped">
+            <table className="table table-striped table-hover">
               <thead>
                 <tr>
                   <th>Дата проверки</th>
@@ -699,7 +704,12 @@ const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection }) 
               </thead>
               <tbody>
                 {pastInspections.map(inspection => (
-                  <tr key={inspection.inspection_id}>
+                  <tr 
+                    key={inspection.inspection_id}
+                    onClick={() => canClickInspection(inspection) && onInspectionClick(inspection.inspection_id)}
+                    style={{ cursor: canClickInspection(inspection) ? 'pointer' : 'default' }}
+                    className={canClickInspection(inspection) ? 'hover-row' : ''}
+                  >
                     <td>{formatDate(inspection.inspection_date)}</td>
                     <td>{getInspectionTypeText(inspection.inspection_type_id)}</td>
                     <td>{getInspectionReasonText(inspection.inspection_reason)}</td>
@@ -716,11 +726,12 @@ const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection }) 
         </div>
       )}
 
-
+      {/* Информационное сообщение */}
       {canClickInspection(futureInspections[0]) && futureInspections.length > 0 && (
         <div className="text-muted small mt-2">
           <i className="bi bi-hand-index me-1"></i>
-          Нажмите на предстоящую проверку для подробного просмотра и редактирования
+          Нажмите на проверку для подробного просмотра
+          {isSeniorInspector && ' и редактирования'}
         </div>
       )}
     </div>
