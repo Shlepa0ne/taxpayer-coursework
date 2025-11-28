@@ -101,4 +101,5 @@ urlpatterns = [
 
     path('worker/worker-search/', WorkerSearchAPIView.as_view(), name='worker-search'),
     path('worker/worker-detail/<int:worker_id>/', WorkerDetailAPIView.as_view(), name='worker-detail'),
+    path('worker/generate-report/', GenerateReportAPIView.as_view(), name='generate-report'),
 ]

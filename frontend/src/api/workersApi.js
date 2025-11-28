@@ -336,3 +336,11 @@ export const updateWorkerInfo = async (workerId, workerData) => {
   const { data } = await axiosInstance.patch(`/worker/worker-detail/${workerId}/`, workerData);
   return data;
 };
+
+// Генерация отчета
+export const generateReport = async (reportParams) => {
+  const { data } = await axiosInstance.post('/worker/generate-report/', reportParams, {
+    responseType: 'blob' // Важно для получения файла
+  });
+  return data;
+};

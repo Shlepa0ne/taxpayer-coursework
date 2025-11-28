@@ -13,7 +13,17 @@ from .authentication import InnAuthentication
 from django.contrib.auth.hashers import check_password, make_password
 from django.db.models import Sum
 from datetime import datetime
-
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from io import BytesIO
+from django.http import HttpResponse
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import os
 
 class TaxpayerListAPIView(generics.ListAPIView):
     queryset = Taxpayer.objects.all()
@@ -2614,3 +2624,771 @@ class WorkerDetailAPIView(APIView):
             
         except TaxOfficer.DoesNotExist:
             return Response({'error': 'Сотрудник не найден'}, status=404)
+
+class GenerateReportAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.register_fonts()
+        self.line_height = 14
+        self.section_spacing = 25
+        self.page_margin = 50
+
+    def register_fonts(self):
+        """Регистрируем шрифты, поддерживающие кириллицу"""
+        try:
+            arial_path = 'C:/Windows/Fonts/arial.ttf'
+            if os.path.exists(arial_path):
+                pdfmetrics.registerFont(TTFont('Arial', arial_path))
+                pdfmetrics.registerFont(TTFont('Arial-Bold', arial_path))
+                print("Шрифт Arial зарегистрирован")
+            else:
+                print("Шрифт Arial не найден, будет использован стандартный шрифт")
+        except Exception as e:
+            print(f"Ошибка при регистрации шрифтов: {e}")
+
+    def set_font(self, pdf, size=10, bold=False):
+        """Устанавливаем шрифт с поддержкой кириллицы"""
+        try:
+            font_name = "Arial-Bold" if bold else "Arial"
+            pdf.setFont(font_name, size)
+        except:
+            font_name = "Helvetica-Bold" if bold else "Helvetica"
+            pdf.setFont(font_name, size)
+
+    def post(self, request):
+        try:
+            print(f"DEBUG: Starting report generation with params: {request.data}")
+            
+            user_inn = request.user.username
+            try:
+                worker_auth = WorkerAuth.objects.get(inn=user_inn)
+                tax_officer = worker_auth.tax_officer if worker_auth.tax_officer else None
+            except WorkerAuth.DoesNotExist:
+                tax_officer = None
+            
+            report_params = request.data
+            buffer = BytesIO()
+            
+            pdf = canvas.Canvas(buffer, pagesize=A4)
+            width, height = A4
+            
+            self.generate_report_content(pdf, report_params, width, height, tax_officer)
+            
+            pdf.save()
+            buffer.seek(0)
+            
+            response = HttpResponse(buffer, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="tax_report_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf"'
+            
+            print("DEBUG: Report generated successfully")
+            return response
+            
+        except Exception as e:
+            print(f"ERROR in report generation: {str(e)}")
+            import traceback
+            print(f"TRACEBACK: {traceback.format_exc()}")
+            
+            return Response(
+                {'error': f'Ошибка генерации отчета: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def generate_report_content(self, pdf, params, width, height, tax_officer=None):
+        """Генерация содержимого отчета с правильным форматированием"""
+        try:
+            print("DEBUG: Starting report content generation")
+            
+            y_position = height - 40
+            
+            # Шапка отчета
+            self.set_font(pdf, 16, True)
+            header_text = "ФЕДЕРАЛЬНАЯ НАЛОГОВАЯ СЛУЖБА РОССИЙСКОЙ ФЕДЕРАЦИИ"
+            pdf.drawCentredString(width/2, y_position, header_text)
+            
+            y_position -= 40
+            
+            # Информация о дате генерации
+            self.set_font(pdf, 10)
+            report_date = f"Отчет сгенерирован: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            pdf.drawCentredString(width/2, y_position, report_date)
+            
+            y_position -= 20
+            
+            # Информация о сотруднике
+            if tax_officer:
+                officer_info = f"Сотрудник: {tax_officer.tax_officer_name}, {tax_officer.unit if tax_officer.unit else 'Не указано'}"
+                pdf.drawCentredString(width/2, y_position, officer_info)
+            
+            y_position -= 40
+            
+            # Заголовок отчета
+            self.set_font(pdf, 14, True)
+            pdf.drawCentredString(width/2, y_position, "Аналитический отчет по работе налоговой")
+            
+            # Добавляем информацию о примененных фильтрах
+            filter_info = self.get_filter_info(params)
+            self.set_font(pdf, 10)
+            y_position -= 20
+            pdf.drawCentredString(width/2, y_position, f"Параметры отчета: {filter_info}")
+            
+            y_position -= 30
+
+            # Основные показатели
+            if params.get('sections', {}).get('basicInfo'):
+                print("DEBUG: Generating basic info section")
+                y_position = self.add_basic_info_section(pdf, params, y_position, width, height)
+                
+            # Финансовая сводка
+            if params.get('sections', {}).get('financialSummary'):
+                print("DEBUG: Generating financial section")
+                y_position = self.add_financial_section(pdf, params, y_position, width, height)
+                
+            # Анализ рисков
+            if params.get('sections', {}).get('riskAnalysis'):
+                print("DEBUG: Generating risk analysis section")
+                y_position = self.add_risk_analysis_section(pdf, params, y_position, width, height)
+                
+            # Проверочная деятельность
+            if params.get('sections', {}).get('inspections'):
+                print("DEBUG: Generating inspections section")
+                y_position = self.add_inspections_section(pdf, params, y_position, width, height)
+
+            # Декларационная работа
+            if params.get('sections', {}).get('declarations'):
+                print("DEBUG: Generating declarations section")
+                y_position = self.add_declarations_section(pdf, params, y_position, width, height)
+
+            # Заявления на снижение
+            if params.get('sections', {}).get('accruals'):
+                print("DEBUG: Generating accruals section")
+                y_position = self.add_accruals_section(pdf, params, y_position, width, height)
+
+            print("DEBUG: Report content generation completed")
+                
+        except Exception as e:
+            print(f"ERROR in generate_report_content: {str(e)}")
+            import traceback
+            print(f"TRACEBACK in generate_report_content: {traceback.format_exc()}")
+            raise
+
+    def check_page_break(self, pdf, y_position, lines_needed=1, height=A4[1]):
+        """Проверяет, нужно ли переносить на новую страницу"""
+        required_space = lines_needed * self.line_height + 50
+        if y_position < required_space:
+            pdf.showPage()
+            return height - 40
+        return y_position
+
+    def add_basic_info_section(self, pdf, params, y_position, width, height):
+        """Добавление раздела с основной информацией"""
+        try:
+            y_position = self.check_page_break(pdf, y_position, 10, height)
+            
+            self.set_font(pdf, 14, True)
+            pdf.drawString(self.page_margin, y_position, "1. Основные показатели")
+            y_position -= self.section_spacing
+            
+            where_condition = self.build_where_condition(params)
+            
+            with connection.cursor() as cursor:
+                # Общее количество налогоплательщиков
+                cursor.execute(f"SELECT COUNT(*) FROM taxpayer t WHERE {where_condition}")
+                total_taxpayers = cursor.fetchone()[0] or 0
+                
+                # Распределение по типам
+                cursor.execute(f"""
+                    SELECT pt.name, COUNT(*) 
+                    FROM taxpayer t
+                    JOIN taxpayer_type pt ON t.payer_type_id = pt.id_taxpayer_type
+                    WHERE {where_condition}
+                    GROUP BY pt.name
+                """)
+                type_distribution = cursor.fetchall()
+                
+                # Распределение по регионам
+                cursor.execute(f"""
+                    SELECT r.name, COUNT(*) 
+                    FROM taxpayer t
+                    JOIN region r ON t.region_key = r.region_id
+                    WHERE {where_condition}
+                    GROUP BY r.name
+                    ORDER BY COUNT(*) DESC
+                    LIMIT 10
+                """)
+                region_distribution = cursor.fetchall()
+
+                # Распределение по налоговым режимам
+                cursor.execute(f"""
+                    SELECT tr.name, COUNT(*) 
+                    FROM taxpayer t
+                    JOIN tax_regime tr ON t.tax_regime_id = tr.regime_id
+                    WHERE {where_condition}
+                    GROUP BY tr.name
+                    ORDER BY COUNT(*) DESC
+                """)
+                regime_distribution = cursor.fetchall()
+            
+            # Вывод данных
+            self.set_font(pdf, 10)
+            y_position = self.check_page_break(pdf, y_position, 2, height)
+            pdf.drawString(self.page_margin + 20, y_position, f"Общее количество налогоплательщиков: {total_taxpayers}")
+            y_position -= self.line_height
+            
+            if total_taxpayers == 0:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Нет данных для отображения")
+                y_position -= self.line_height
+                return y_position - 20
+            
+            if type_distribution:
+                y_position = self.check_page_break(pdf, y_position, len(type_distribution) + 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Распределение по типам:")
+                y_position -= self.line_height
+                
+                for type_name, count in type_distribution:
+                    y_position = self.check_page_break(pdf, y_position, 1, height)
+                    pdf.drawString(self.page_margin + 40, y_position, f"- {type_name}: {count}")
+                    y_position -= self.line_height
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Распределение по типам: нет данных")
+                y_position -= self.line_height
+                    
+            if region_distribution:
+                y_position = self.check_page_break(pdf, y_position, len(region_distribution) + 3, height)
+                y_position -= 10
+                pdf.drawString(self.page_margin + 20, y_position, "Топ регионов:")
+                y_position -= self.line_height
+                
+                for region_name, count in region_distribution:
+                    y_position = self.check_page_break(pdf, y_position, 1, height)
+                    pdf.drawString(self.page_margin + 40, y_position, f"- {region_name}: {count}")
+                    y_position -= self.line_height
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                y_position -= 10
+                pdf.drawString(self.page_margin + 20, y_position, "Топ регионов: нет данных")
+                y_position -= self.line_height
+
+            if regime_distribution:
+                y_position = self.check_page_break(pdf, y_position, len(regime_distribution) + 3, height)
+                y_position -= 10
+                pdf.drawString(self.page_margin + 20, y_position, "Распределение по налоговым режимам:")
+                y_position -= self.line_height
+                
+                for regime_name, count in regime_distribution:
+                    y_position = self.check_page_break(pdf, y_position, 1, height)
+                    pdf.drawString(self.page_margin + 40, y_position, f"- {regime_name}: {count}")
+                    y_position -= self.line_height
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                y_position -= 10
+                pdf.drawString(self.page_margin + 20, y_position, "Распределение по налоговым режимам: нет данных")
+                y_position -= self.line_height
+                
+            return y_position - 20
+            
+        except Exception as e:
+            print(f"ERROR in add_basic_info_section: {str(e)}")
+            return y_position - 50
+
+    def add_financial_section(self, pdf, params, y_position, width, height):
+        """Добавление финансового раздела"""
+        try:
+            y_position = self.check_page_break(pdf, y_position, 15, height)
+            
+            self.set_font(pdf, 14, True)
+            pdf.drawString(self.page_margin, y_position, "2. Финансовая сводка")
+            y_position -= self.section_spacing
+            
+            where_condition = self.build_where_condition(params, 't')
+
+            with connection.cursor() as cursor:
+                # Сумма начисленных налогов
+                cursor.execute(f"""
+                    SELECT COALESCE(SUM(ta.accrual_amount), 0) 
+                    FROM tax_accrual ta
+                    JOIN taxpayer t ON ta.taxpayer_id = t.taxpayer_id
+                    WHERE {where_condition}
+                """)
+                total_accruals = cursor.fetchone()[0] or 0
+                
+                # Сумма уплаченных налогов
+                cursor.execute(f"""
+                    SELECT COALESCE(SUM(tp.payment_amount), 0) 
+                    FROM tax_payment tp
+                    JOIN tax_accrual ta ON tp.tax_income_id = ta.tax_accrual_id
+                    JOIN taxpayer t ON ta.taxpayer_id = t.taxpayer_id
+                    WHERE {where_condition}
+                """)
+                total_payments = cursor.fetchone()[0] or 0
+                
+                # Задолженность
+                cursor.execute(f"""
+                    SELECT COALESCE(SUM(ta.accrual_amount + COALESCE(ta.percent_amount, 0) - COALESCE(tp.total_paid, 0)), 0)
+                    FROM tax_accrual ta
+                    JOIN taxpayer t ON ta.taxpayer_id = t.taxpayer_id
+                    LEFT JOIN (
+                        SELECT tax_income_id, SUM(payment_amount) as total_paid
+                        FROM tax_payment
+                        GROUP BY tax_income_id
+                    ) tp ON ta.tax_accrual_id = tp.tax_income_id
+                    WHERE {where_condition} 
+                    AND (ta.accrual_amount + COALESCE(ta.percent_amount, 0)) > COALESCE(tp.total_paid, 0)
+                """)
+                total_debt = cursor.fetchone()[0] or 0
+                
+                # Процент оплаченных налогов
+                payment_percentage = (total_payments / total_accruals * 100) if total_accruals > 0 else 0
+                
+                # Распределение по типам налогов
+                cursor.execute(f"""
+                    SELECT tt.tax_type_name, SUM(ta.accrual_amount)
+                    FROM tax_accrual ta
+                    JOIN tax_type tt ON ta.tax_type_id = tt.tax_type_id
+                    JOIN taxpayer t ON ta.taxpayer_id = t.taxpayer_id
+                    WHERE {where_condition}
+                    GROUP BY tt.tax_type_name
+                    ORDER BY SUM(ta.accrual_amount) DESC
+                    LIMIT 10
+                """)
+                tax_type_distribution = cursor.fetchall()
+            
+            self.set_font(pdf, 10)
+            y_position = self.check_page_break(pdf, y_position, 5, height)
+            pdf.drawString(self.page_margin + 20, y_position, f"Общая сумма начисленных налогов: {float(total_accruals):,.2f} руб.")
+            y_position -= self.line_height
+            pdf.drawString(self.page_margin + 20, y_position, f"Общая сумма уплаченных налогов: {float(total_payments):,.2f} руб.")
+            y_position -= self.line_height
+            pdf.drawString(self.page_margin + 20, y_position, f"Общая задолженность: {float(total_debt):,.2f} руб.")
+            y_position -= self.line_height
+            pdf.drawString(self.page_margin + 20, y_position, f"Процент оплаченных налогов: {payment_percentage:.1f}%")
+            y_position -= self.line_height * 2
+            
+            if tax_type_distribution:
+                y_position = self.check_page_break(pdf, y_position, len(tax_type_distribution) + 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Топ видов налогов по начислениям:")
+                y_position -= self.line_height
+                
+                for tax_type, amount in tax_type_distribution:
+                    y_position = self.check_page_break(pdf, y_position, 1, height)
+                    pdf.drawString(self.page_margin + 40, y_position, f"- {tax_type}: {float(amount):,.2f} руб.")
+                    y_position -= self.line_height
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Топ видов налогов по начислениям: нет данных")
+                y_position -= self.line_height
+            
+            return y_position - 20
+            
+        except Exception as e:
+            print(f"ERROR in add_financial_section: {str(e)}")
+            return y_position - 50
+
+    def add_risk_analysis_section(self, pdf, params, y_position, width, height):
+        """Добавление анализа рисков"""
+        try:
+            y_position = self.check_page_break(pdf, y_position, 15, height)
+            
+            self.set_font(pdf, 14, True)
+            pdf.drawString(self.page_margin, y_position, "3. Анализ рисков")
+            y_position -= self.section_spacing
+            
+            where_condition = self.build_where_condition(params, 't')
+            
+            with connection.cursor() as cursor:
+                # Средний RiskScore
+                cursor.execute(f"""
+                    SELECT AVG(latest_ratings.rating_value) 
+                    FROM (
+                        SELECT DISTINCT ON (tr.taxpayer_id) tr.rating_value
+                        FROM taxpayer_rating tr
+                        JOIN taxpayer t ON tr.taxpayer_id = t.taxpayer_id
+                        WHERE {where_condition}
+                        ORDER BY tr.taxpayer_id, tr.rating_date DESC, tr.rating_id DESC
+                    ) AS latest_ratings
+                """)
+                result = cursor.fetchone()
+                avg_risk_score = result[0] if result and result[0] is not None else 0
+                
+                # Распределение по группам риска
+                cursor.execute(f"""
+                    SELECT 
+                        COUNT(CASE WHEN rating_value <= 30 THEN 1 END) as low_risk,
+                        COUNT(CASE WHEN rating_value > 30 AND rating_value <= 70 THEN 1 END) as medium_risk,
+                        COUNT(CASE WHEN rating_value > 70 THEN 1 END) as high_risk
+                    FROM (
+                        SELECT DISTINCT ON (tr.taxpayer_id) tr.rating_value
+                        FROM taxpayer_rating tr
+                        JOIN taxpayer t ON tr.taxpayer_id = t.taxpayer_id
+                        WHERE {where_condition}
+                        ORDER BY tr.taxpayer_id, tr.rating_date DESC, tr.rating_id DESC
+                    ) AS latest_ratings
+                """)
+                risk_distribution = cursor.fetchone()
+                
+                # Топ плательщиков с высоким риском
+                cursor.execute(f"""
+                    SELECT t.inn, COALESCE(t.fio, t.full_name, 'Не указано') as name, tr.rating_value
+                    FROM taxpayer_rating tr
+                    JOIN taxpayer t ON tr.taxpayer_id = t.taxpayer_id
+                    WHERE (t.taxpayer_id, tr.rating_date, tr.rating_id) IN (
+                        SELECT taxpayer_id, MAX(rating_date), MAX(rating_id)
+                        FROM taxpayer_rating
+                        GROUP BY taxpayer_id
+                    )
+                    AND {where_condition}
+                    AND tr.rating_value > 70
+                    ORDER BY tr.rating_value DESC
+                    LIMIT 10
+                """)
+                high_risk_taxpayers = cursor.fetchall()
+        
+            self.set_font(pdf, 10)
+            y_position = self.check_page_break(pdf, y_position, 3, height)
+            pdf.drawString(self.page_margin + 20, y_position, f"Средний RiskScore: {float(avg_risk_score):.2f}")
+            y_position -= self.line_height * 2
+            
+            if risk_distribution and any(risk_distribution):
+                low, medium, high = risk_distribution
+                y_position = self.check_page_break(pdf, y_position, 5, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Распределение по группам риска:")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Низкий риск (0-30): {low} плательщиков")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Средний риск (31-70): {medium} плательщиков")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Высокий риск (71-100): {high} плательщиков")
+                y_position -= self.line_height * 2
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Распределение по группам риска: нет данных")
+                y_position -= self.line_height * 2
+                
+            if high_risk_taxpayers:
+                y_position = self.check_page_break(pdf, y_position, len(high_risk_taxpayers) + 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Топ-10 плательщиков с высоким риском:")
+                y_position -= self.line_height
+                
+                for inn, name, risk_score in high_risk_taxpayers:
+                    y_position = self.check_page_break(pdf, y_position, 1, height)
+                    if len(name) > 40:
+                        name = name[:40] + '...'
+                    pdf.drawString(self.page_margin + 40, y_position, f"- {name} (ИНН: {inn}): {float(risk_score):.2f}")
+                    y_position -= self.line_height
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Топ-10 плательщиков с высоким риском: нет данных")
+                y_position -= self.line_height
+            
+            return y_position - 20
+            
+        except Exception as e:
+            print(f"ERROR in add_risk_analysis_section: {str(e)}")
+            return y_position - 50
+
+    def add_inspections_section(self, pdf, params, y_position, width, height):
+        """Добавление раздела по проверкам"""
+        try:
+            y_position = self.check_page_break(pdf, y_position, 15, height)
+            
+            self.set_font(pdf, 14, True)
+            pdf.drawString(self.page_margin, y_position, "4. Проверочная деятельность")
+            y_position -= self.section_spacing
+            
+            where_condition = self.build_where_condition(params, 't')
+            
+            with connection.cursor() as cursor:
+                # Статистика проверок
+                cursor.execute(f"""
+                    SELECT 
+                        COUNT(*) as total_inspections,
+                        COUNT(CASE WHEN i.inspection_type_status_id = 1 THEN 1 END) as planned,
+                        COUNT(CASE WHEN i.inspection_type_status_id = 2 THEN 1 END) as completed,
+                        COUNT(CASE WHEN i.inspection_type_status_id = 3 THEN 1 END) as in_progress
+                    FROM inspection i
+                    JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
+                    WHERE {where_condition}
+                """)
+                inspection_stats = cursor.fetchone()
+                
+                # Выявленные нарушения
+                cursor.execute(f"""
+                    SELECT 
+                        COUNT(*) as total_violations,
+                        COALESCE(SUM(iv.sum_to_pay), 0) as total_fines
+                    FROM identified_violation iv
+                    JOIN inspection i ON iv.inspection_id = i.inspection_id
+                    JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
+                    WHERE {where_condition}
+                """)
+                violation_stats = cursor.fetchone()
+                
+                # Эффективность проверок по типам
+                cursor.execute(f"""
+                    SELECT it.inspection_name_id, COUNT(*)
+                    FROM inspection i
+                    JOIN inspection_type it ON i.inspection_type_id = it.inspection_type_id
+                    JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
+                    WHERE {where_condition}
+                    GROUP BY it.inspection_name_id
+                    ORDER BY COUNT(*) DESC
+                    LIMIT 5
+                """)
+                inspection_types = cursor.fetchall()
+            
+            self.set_font(pdf, 10)
+            if inspection_stats and any(inspection_stats):
+                total, planned, completed, in_progress = inspection_stats
+                y_position = self.check_page_break(pdf, y_position, 6, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Статистика проверок:")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Всего проверок: {total}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Запланировано: {planned}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Завершено: {completed}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- В процессе: {in_progress}")
+                y_position -= self.line_height * 2
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Статистика проверок: нет данных")
+                y_position -= self.line_height * 2
+                
+            if violation_stats and any(violation_stats):
+                total_violations, total_fines = violation_stats
+                y_position = self.check_page_break(pdf, y_position, 4, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Выявленные нарушения:")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Количество нарушений: {total_violations}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Сумма доначислений: {float(total_fines):,.2f} руб.")
+                y_position -= self.line_height * 2
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Выявленные нарушения: нет данных")
+                y_position -= self.line_height * 2
+                
+            if inspection_types:
+                y_position = self.check_page_break(pdf, y_position, len(inspection_types) + 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Типы проверок:")
+                y_position -= self.line_height
+                
+                for inspection_type, count in inspection_types:
+                    y_position = self.check_page_break(pdf, y_position, 1, height)
+                    pdf.drawString(self.page_margin + 40, y_position, f"- {inspection_type}: {count}")
+                    y_position -= self.line_height
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Типы проверок: нет данных")
+                y_position -= self.line_height
+            
+            return y_position - 20
+            
+        except Exception as e:
+            print(f"ERROR in add_inspections_section: {str(e)}")
+            return y_position - 50
+
+    def add_declarations_section(self, pdf, params, y_position, width, height):
+        """Добавление раздела по декларациям"""
+        try:
+            y_position = self.check_page_break(pdf, y_position, 10, height)
+            
+            self.set_font(pdf, 14, True)
+            pdf.drawString(self.page_margin, y_position, "5. Декларационная работа")
+            y_position -= self.section_spacing
+            
+            where_condition = self.build_where_condition(params, 't')
+            
+            with connection.cursor() as cursor:
+                # Статистика деклараций
+                cursor.execute(f"""
+                    SELECT 
+                        COUNT(*) as total_declarations,
+                        COUNT(CASE WHEN d.declaration_status_id = 2 THEN 1 END) as submitted,
+                        COUNT(CASE WHEN d.declaration_status_id = 3 THEN 1 END) as approved,
+                        COUNT(CASE WHEN d.declaration_status_id = 4 THEN 1 END) as rejected
+                    FROM tax_declaration d
+                    JOIN taxpayer t ON d.taxpayer_id = t.taxpayer_id
+                    WHERE {where_condition}
+                """)
+                declaration_stats = cursor.fetchone()
+                
+                if declaration_stats:
+                    total, submitted, approved, rejected = declaration_stats
+                    approval_rate = (approved / total * 100) if total > 0 else 0
+            
+            self.set_font(pdf, 10)
+            if declaration_stats and any(declaration_stats):
+                total, submitted, approved, rejected = declaration_stats
+                y_position = self.check_page_break(pdf, y_position, 7, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Статистика деклараций:")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Всего деклараций: {total}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Подано: {submitted}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Одобрено: {approved}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Отклонено: {rejected}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Процент одобрения: {approval_rate:.1f}%")
+                y_position -= self.line_height * 2
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Статистика деклараций: нет данных")
+                y_position -= self.line_height * 2
+            
+            return y_position - 20
+            
+        except Exception as e:
+            print(f"ERROR in add_declarations_section: {str(e)}")
+            return y_position - 50
+
+    def add_accruals_section(self, pdf, params, y_position, width, height):
+        """Добавление раздела по заявлениям на снижение"""
+        try:
+            y_position = self.check_page_break(pdf, y_position, 10, height)
+            
+            self.set_font(pdf, 14, True)
+            pdf.drawString(self.page_margin, y_position, "6. Заявления на снижение")
+            y_position -= self.section_spacing
+            
+            where_condition = self.build_where_condition(params, 't')
+            
+            with connection.cursor() as cursor:
+                # Статистика заявлений на снижение
+                cursor.execute(f"""
+                    SELECT 
+                        COUNT(*) as total_requests,
+                        COUNT(CASE WHEN trr.request_status_id = 2 THEN 1 END) as approved,
+                        COUNT(CASE WHEN trr.request_status_id = 3 THEN 1 END) as rejected,
+                        AVG(trr.requested_reduce_amount)
+                    FROM tax_reduce_request trr
+                    JOIN taxpayer t ON trr.taxpayer_id = t.taxpayer_id
+                    WHERE {where_condition}
+                """)
+                request_stats = cursor.fetchone()
+                
+                if request_stats:
+                    total_requests, approved, rejected, avg_amount = request_stats
+                    approval_rate = (approved / total_requests * 100) if total_requests > 0 else 0
+            
+            self.set_font(pdf, 10)
+            if request_stats and any(request_stats) and total_requests > 0:
+                y_position = self.check_page_break(pdf, y_position, 7, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Статистика заявлений на снижение:")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Всего заявлений: {total_requests}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Одобрено: {approved}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Отклонено: {rejected}")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Процент одобрения: {approval_rate:.1f}%")
+                y_position -= self.line_height
+                pdf.drawString(self.page_margin + 40, y_position, f"- Средняя запрашиваемая сумма: {float(avg_amount or 0):.2f} руб.")
+                y_position -= self.line_height * 2
+            else:
+                y_position = self.check_page_break(pdf, y_position, 2, height)
+                pdf.drawString(self.page_margin + 20, y_position, "Статистика заявлений на снижение: нет данных")
+                y_position -= self.line_height * 2
+            
+            return y_position - 20
+            
+        except Exception as e:
+            print(f"ERROR in add_accruals_section: {str(e)}")
+            return y_position - 50
+
+    def build_where_condition(self, params, table_alias='t'):
+        """Строит условие WHERE для SQL-запросов на основе параметров"""
+        try:
+            conditions = []
+            
+            regions = params.get('regions', [])
+            if regions:
+                conditions.append(f"{table_alias}.region_key IN ({','.join(map(str, regions))})")
+            
+            payer_types = params.get('payerTypes', [])
+            if payer_types:
+                conditions.append(f"{table_alias}.payer_type_id IN ({','.join(map(str, payer_types))})")
+            
+            tax_regimes = params.get('taxRegimes', [])
+            if tax_regimes:
+                conditions.append(f"{table_alias}.tax_regime_id IN ({','.join(map(str, tax_regimes))})")
+            
+            risk_range = params.get('riskScoreRange', {})
+            min_risk = risk_range.get('min', 0)
+            max_risk = risk_range.get('max', 100)
+            
+            if min_risk > 0 or max_risk < 100:
+                risk_subquery = f"""
+                    (SELECT tr.rating_value 
+                     FROM taxpayer_rating tr 
+                     WHERE tr.taxpayer_id = {table_alias}.taxpayer_id 
+                     ORDER BY tr.rating_date DESC, tr.rating_id DESC 
+                     LIMIT 1)
+                """
+                if min_risk > 0:
+                    conditions.append(f"{risk_subquery} >= {min_risk}")
+                if max_risk < 100:
+                    conditions.append(f"{risk_subquery} <= {max_risk}")
+            
+            where_condition = " AND ".join(conditions) if conditions else "1=1"
+            return where_condition
+            
+        except Exception as e:
+            print(f"ERROR in build_where_condition: {str(e)}")
+            return "1=1"
+
+    def get_filter_info(self, params):
+        """Формирует строку с информацией о примененных фильтрах"""
+        try:
+            filters = []
+            
+            # Регионы с названиями
+            regions = params.get('regions', [])
+            if regions:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT name FROM region WHERE region_id IN %s", [tuple(regions)])
+                    region_names = [row[0] for row in cursor.fetchall()]
+                if region_names:
+                    filters.append(f"Регионы: {', '.join(region_names)}")
+            
+            # Типы плательщиков с названиями
+            payer_types = params.get('payerTypes', [])
+            if payer_types:
+                type_names = {
+                    1: 'Физические лица',
+                    2: 'Индивидуальные предприниматели', 
+                    3: 'Юридические лица'
+                }
+                selected_types = [type_names.get(t, f"Тип {t}") for t in payer_types]
+                filters.append(f"Типы плательщиков: {', '.join(selected_types)}")
+            
+            # Налоговые режимы с названиями
+            tax_regimes = params.get('taxRegimes', [])
+            if tax_regimes:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT name FROM tax_regime WHERE regime_id IN %s", [tuple(tax_regimes)])
+                    regime_names = [row[0] for row in cursor.fetchall()]
+                if regime_names:
+                    filters.append(f"Налоговые режимы: {', '.join(regime_names)}")
+            
+            # Диапазон RiskScore
+            risk_range = params.get('riskScoreRange', {})
+            min_risk = risk_range.get('min', 0)
+            max_risk = risk_range.get('max', 100)
+            
+            if min_risk > 0 or max_risk < 100:
+                filters.append(f"RiskScore: {min_risk}-{max_risk}")
+            
+            return ", ".join(filters) if filters else "все данные"
+            
+        except Exception as e:
+            print(f"ERROR in get_filter_info: {str(e)}")
+            return "все данные"
