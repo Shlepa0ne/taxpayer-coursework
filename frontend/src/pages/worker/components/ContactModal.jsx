@@ -139,7 +139,6 @@ const ContactModal = ({ contact, taxpayerId, onClose, onSave }) => {
   };
 
   return (
-    <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="modal-dialog">
         <div className="modal-content">
           <div className="modal-header bg-primary text-white">
@@ -238,7 +237,6 @@ const ContactModal = ({ contact, taxpayerId, onClose, onSave }) => {
           </form>
         </div>
       </div>
-    </div>
   );
 };
 

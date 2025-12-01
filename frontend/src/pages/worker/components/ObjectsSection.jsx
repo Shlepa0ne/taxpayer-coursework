@@ -1,47 +1,18 @@
+// frontend/src/pages/worker/components/ObjectsSection.jsx
 import React, { useState, useEffect } from 'react';
-import { deleteTaxableObject } from '../../../api/workersApi';
-import ObjectModal from './ObjectModal';
-import { formatDate, formatCurrency } from '../../../utils/formatters';
+import { formatDate, formatCurrency } from '../../../utils/formatters'; // ДОБАВИТЬ импорт
 
-const ObjectsSection = ({ objects, taxpayerId, canEdit, onUpdate }) => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingObject, setEditingObject] = useState(null);
-
+const ObjectsSection = ({ 
+  objects, 
+  taxpayerId, 
+  canEdit, 
+  onAddObject,
+  onEditObject,
+  onDeleteObject
+}) => {
   useEffect(() => {
     console.log('ObjectsSection received objects:', objects);
-    console.log('ObjectsSection taxpayerId:', taxpayerId);
-    
-    // Подробный вывод каждого объекта
-    objects.forEach((ownership, index) => {
-      const obj = ownership.object;
-      console.log(`Object ${index + 1}:`, {
-        id: obj.object_id,
-        name: obj.object_name,
-        type: obj.object_type_name,
-        type_id: obj.object_type_id,
-        address: obj.object_address,
-        cadastral_number: obj.cadastral_number,
-        cadastral_value: obj.cadastral_value,
-        extra_value: obj.extra_value,
-        transport_vin: obj.transport_vin,
-        registration_plate: obj.registration_plate,
-        engine_power: obj.engine_power
-      });
-    });
-  }, [objects, taxpayerId]);
-
-  const handleDeleteObject = async (objectId) => {
-    if (window.confirm('Вы уверены, что хотите удалить этот объект?')) {
-      try {
-        await deleteTaxableObject(objectId);
-        onUpdate(taxpayerId);
-      } catch (error) {
-        console.error('Ошибка при удалении объекта:', error);
-        console.error('Response:', error.response?.data);
-        alert('Ошибка при удалении объекта: ' + (error.response?.data?.error || error.message));
-      }
-    }
-  };
+  }, [objects]);
 
   // Функция для определения, какие поля показывать в зависимости от типа объекта
   const getObjectDisplayFields = (obj) => {
@@ -56,7 +27,7 @@ const ObjectsSection = ({ objects, taxpayerId, canEdit, onUpdate }) => {
       };
     } else if (typeName.includes('транспорт')) {
       return {
-        showAddress: false, // Транспорт может иметь адрес
+        showAddress: false,
         showCadastralFields: false,
         showTransportFields: true,
         showExtraValue: false
@@ -77,7 +48,7 @@ const ObjectsSection = ({ objects, taxpayerId, canEdit, onUpdate }) => {
         <div className="mb-3">
           <button 
             className="btn btn-primary"
-            onClick={() => setShowAddModal(true)}
+            onClick={() => onAddObject()}
           >
             <i className="bi bi-plus-circle me-2"></i>
             Добавить объект
@@ -110,13 +81,13 @@ const ObjectsSection = ({ objects, taxpayerId, canEdit, onUpdate }) => {
                       <div className="btn-group btn-group-sm">
                         <button 
                           className="btn btn-outline-primary"
-                          onClick={() => setEditingObject({ ...obj, ownership })}
+                          onClick={() => onEditObject({ ...obj, ownership })}
                         >
                           <i className="bi bi-pencil"></i>
                         </button>
                         <button 
                           className="btn btn-outline-danger"
-                          onClick={() => handleDeleteObject(obj.object_id)}
+                          onClick={() => onDeleteObject(obj.object_id)}
                         >
                           <i className="bi bi-trash"></i>
                         </button>
@@ -184,7 +155,6 @@ const ObjectsSection = ({ objects, taxpayerId, canEdit, onUpdate }) => {
                       </div>
                     </div>
                   </div>
-                  
                 </div>
               </div>
             );
@@ -195,23 +165,6 @@ const ObjectsSection = ({ objects, taxpayerId, canEdit, onUpdate }) => {
           <i className="bi bi-house-x display-4"></i>
           <p className="mt-2">Налогооблагаемые объекты не найдены</p>
         </div>
-      )}
-
-      {/* Модальные окна для добавления/редактирования объектов */}
-      {(showAddModal || editingObject) && (
-        <ObjectModal
-          object={editingObject}
-          taxpayerId={taxpayerId}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingObject(null);
-          }}
-          onSave={() => {
-            setShowAddModal(false);
-            setEditingObject(null);
-            onUpdate(taxpayerId);
-          }}
-        />
       )}
     </div>
   );

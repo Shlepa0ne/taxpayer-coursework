@@ -1,3 +1,4 @@
+// frontend/src/pages/worker/WorkerTaxpayerSearch.jsx
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
@@ -8,14 +9,20 @@ import {
   updateRequestStatus, 
   getCurrentWorker,
   updateDeclarationStatus,
-  updateTaxAccrual // ДОБАВЛЕН
+  updateTaxAccrual,
+  deleteContact, // ДОБАВЛЕНО
+  deleteDocument, // ДОБАВЛЕНО
+  deleteTaxableObject // ДОБАВЛЕНО
 } from '../../api/workersApi';
 import Spinner from '../../components/ui/Spinner';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import RequestDetailModal from './components/RequestDetailModal';
 import DeclarationDetailModal from './components/DeclarationDetailModal';
 import InspectionDetailModal from './components/InspectionDetailModal';
-import AccrualDetailModal from './components/AccrualDetailModal'; // ДОБАВЛЕН
+import AccrualDetailModal from './components/AccrualDetailModal';
+import ContactModal from './components/ContactModal'; // ДОБАВЛЕНО
+import DocumentModal from './components/DocumentModal'; // ДОБАВЛЕНО
+import ObjectModal from './components/ObjectModal'; // ДОБАВЛЕНО
 import TaxpayerDetailView from './components/TaxpayerDetailView';
 import SearchForm from './components/SearchForm';
 import SearchResults from './components/SearchResults';
@@ -29,19 +36,26 @@ const WorkerTaxpayerSearch = () => {
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState('');
+  const [currentWorker, setCurrentWorker] = useState(null);
+  const queryClient = useQueryClient();
+
+  // Состояния для модальных окон
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  
-  // Состояния для модальных окон
   const [selectedDeclaration, setSelectedDeclaration] = useState(null);
   const [showDeclarationModal, setShowDeclarationModal] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState(null);
   const [showInspectionModal, setShowInspectionModal] = useState(false);
-  const [selectedAccrual, setSelectedAccrual] = useState(null); // ДОБАВЛЕН
-  const [showAccrualModal, setShowAccrualModal] = useState(false); // ДОБАВЛЕН
+  const [selectedAccrual, setSelectedAccrual] = useState(null);
+  const [showAccrualModal, setShowAccrualModal] = useState(false);
   
-  const [currentWorker, setCurrentWorker] = useState(null);
-  const queryClient = useQueryClient();
+  // ДОБАВЛЕНО: Состояния для новых модальных окон
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [selectedObject, setSelectedObject] = useState(null);
+  const [showObjectModal, setShowObjectModal] = useState(false);
 
   // Загрузка информации о текущем сотруднике
   useEffect(() => {
@@ -179,6 +193,54 @@ const WorkerTaxpayerSearch = () => {
     }
   };
 
+  // ДОБАВЛЕНО: Функция для удаления контакта
+  const handleDeleteContact = async (contactId) => {
+    if (window.confirm('Вы уверены, что хотите удалить этот контакт?')) {
+      try {
+        await deleteContact(contactId);
+        if (selectedTaxpayer) {
+          const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
+          setSelectedTaxpayer(updatedTaxpayer);
+        }
+      } catch (error) {
+        console.error('Ошибка при удалении контакта:', error);
+        alert('Ошибка при удалении контакта: ' + (error.response?.data?.error || error.message));
+      }
+    }
+  };
+
+  // ДОБАВЛЕНО: Функция для удаления документа
+  const handleDeleteDocument = async (documentId) => {
+    if (window.confirm('Вы уверены, что хотите удалить этот документ?')) {
+      try {
+        await deleteDocument(documentId);
+        if (selectedTaxpayer) {
+          const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
+          setSelectedTaxpayer(updatedTaxpayer);
+        }
+      } catch (error) {
+        console.error('Ошибка при удалении документа:', error);
+        alert('Ошибка при удалении документа: ' + (error.response?.data?.error || error.message));
+      }
+    }
+  };
+
+  // ДОБАВЛЕНО: Функция для удаления объекта
+  const handleDeleteObject = async (objectId) => {
+    if (window.confirm('Вы уверены, что хотите удалить этот объект?')) {
+      try {
+        await deleteTaxableObject(objectId);
+        if (selectedTaxpayer) {
+          const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
+          setSelectedTaxpayer(updatedTaxpayer);
+        }
+      } catch (error) {
+        console.error('Ошибка при удалении объекта:', error);
+        alert('Ошибка при удалении объекта: ' + (error.response?.data?.error || error.message));
+      }
+    }
+  };
+
   // Функция для открытия заявления
   const handleRequestClick = async (requestId) => {
     try {
@@ -216,11 +278,36 @@ const WorkerTaxpayerSearch = () => {
   const handleAccrualClick = async (accrualId) => {
     if (!selectedTaxpayer) return;
     
-    // Находим начисление в данных налогоплательщика
     const accrual = selectedTaxpayer.accruals?.find(a => a.tax_accrual_id === accrualId);
     if (accrual) {
       setSelectedAccrual(accrual);
       setShowAccrualModal(true);
+    }
+  };
+
+  // ДОБАВЛЕНО: Функция для открытия контакта
+  const handleContactClick = async (contact = null) => {
+    setSelectedContact(contact);
+    setShowContactModal(true);
+  };
+
+  // ДОБАВЛЕНО: Функция для открытия документа
+  const handleDocumentClick = async (document = null) => {
+    setSelectedDocument(document);
+    setShowDocumentModal(true);
+  };
+
+  // ДОБАВЛЕНО: Функция для открытия объекта
+  const handleObjectClick = async (object = null) => {
+    setSelectedObject(object);
+    setShowObjectModal(true);
+  };
+
+  // ДОБАВЛЕНО: Функция для сохранения и обновления данных
+  const handleItemSave = async () => {
+    if (selectedTaxpayer) {
+      const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
+      setSelectedTaxpayer(updatedTaxpayer);
     }
   };
 
@@ -308,7 +395,13 @@ const WorkerTaxpayerSearch = () => {
                 onRequestClick={handleRequestClick}
                 onDeclarationClick={handleDeclarationClick}
                 onInspectionClick={handleInspectionClick}
-                onAccrualClick={handleAccrualClick} // ДОБАВЛЕН
+                onAccrualClick={handleAccrualClick}
+                onContactClick={handleContactClick} // ДОБАВЛЕНО
+                onDocumentClick={handleDocumentClick} // ДОБАВЛЕНО
+                onObjectClick={handleObjectClick} // ДОБАВЛЕНО
+                onDeleteContact={handleDeleteContact} // ДОБАВЛЕНО
+                onDeleteDocument={handleDeleteDocument} // ДОБАВЛЕНО
+                onDeleteObject={handleDeleteObject} // ДОБАВЛЕНО
                 canChangeStatus={canChangeRequestStatus}
                 onTaxpayerUpdate={handleTaxpayerSelect}
                 currentWorker={currentWorker}
@@ -380,6 +473,63 @@ const WorkerTaxpayerSearch = () => {
           canChangeStatus={isSeniorInspector}
           fromSearch={true}
         />
+      )}
+
+      {/* ДОБАВЛЕНО: Модальное окно для контактов */}
+      {showContactModal && selectedTaxpayer && (
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <ContactModal
+            contact={selectedContact}
+            taxpayerId={selectedTaxpayer.taxpayer_id}
+            onClose={() => {
+              setShowContactModal(false);
+              setSelectedContact(null);
+            }}
+            onSave={() => {
+              setShowContactModal(false);
+              setSelectedContact(null);
+              handleItemSave();
+            }}
+          />
+        </div>
+      )}
+
+      {/* ДОБАВЛЕНО: Модальное окно для документов */}
+      {showDocumentModal && selectedTaxpayer && (
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <DocumentModal
+            document={selectedDocument}
+            taxpayerId={selectedTaxpayer.taxpayer_id}
+            onClose={() => {
+              setShowDocumentModal(false);
+              setSelectedDocument(null);
+            }}
+            onSave={() => {
+              setShowDocumentModal(false);
+              setSelectedDocument(null);
+              handleItemSave();
+            }}
+          />
+        </div>
+      )}
+
+      {/* ДОБАВЛЕНО: Модальное окно для объектов */}
+      {showObjectModal && selectedTaxpayer && (
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <ObjectModal
+            object={selectedObject}
+            taxpayerId={selectedTaxpayer.taxpayer_id}
+            onClose={() => {
+              setShowObjectModal(false);
+              setSelectedObject(null);
+            }}
+            onSave={() => {
+              setShowObjectModal(false);
+              setSelectedObject(null);
+              handleItemSave();
+            }}
+          />
+        </div>
       )}
     </div>
   );

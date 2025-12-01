@@ -1,10 +1,14 @@
+// frontend/src/pages/worker/components/ContactsSection.jsx
 import React, { useState, useEffect } from 'react';
-import { deleteContact, updateContact } from '../../../api/workersApi';
-import ContactModal from './ContactModal';
 
-const ContactsSection = ({ contacts, taxpayerId, canEdit, onUpdate }) => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingContact, setEditingContact] = useState(null);
+const ContactsSection = ({ 
+  contacts, 
+  taxpayerId, 
+  canEdit, 
+  onAddContact,
+  onEditContact,
+  onDeleteContact
+}) => {
   const [localContacts, setLocalContacts] = useState([]);
 
   // Синхронизируем локальное состояние с пропсами
@@ -13,40 +17,13 @@ const ContactsSection = ({ contacts, taxpayerId, canEdit, onUpdate }) => {
     setLocalContacts(contacts);
   }, [contacts]);
 
-  // Добавить отладочную информацию
-  useEffect(() => {
-    console.log('ContactsSection received contacts:', contacts);
-    console.log('Local contacts state:', localContacts);
-    console.log('Taxpayer ID:', taxpayerId);
-    console.log('Can edit:', canEdit);
-  }, [contacts, localContacts, taxpayerId, canEdit]);
-
-  const handleDeleteContact = async (contactId) => {
-    if (window.confirm('Вы уверены, что хотите удалить этот контакт?')) {
-      try {
-        await deleteContact(contactId);
-        // Принудительное обновление
-        onUpdate(taxpayerId);
-      } catch (error) {
-        console.error('Ошибка при удалении контакта:', error);
-        alert('Ошибка при удалении контакта: ' + (error.response?.data?.error || error.message));
-      }
-    }
-  };
-
-  const handleAddContactSuccess = () => {
-    console.log('Contact added successfully, refreshing data...');
-    // Принудительное обновление данных
-    onUpdate(taxpayerId);
-  };
-
   return (
     <div>
       {canEdit && (
         <div className="mb-3">
           <button 
             className="btn btn-primary"
-            onClick={() => setShowAddModal(true)}
+            onClick={() => onAddContact()}
           >
             <i className="bi bi-plus-circle me-2"></i>
             Добавить контакт
@@ -70,13 +47,13 @@ const ContactsSection = ({ contacts, taxpayerId, canEdit, onUpdate }) => {
                     <div className="btn-group btn-group-sm">
                       <button 
                         className="btn btn-outline-primary"
-                        onClick={() => setEditingContact(contact)}
+                        onClick={() => onEditContact(contact)}
                       >
                         <i className="bi bi-pencil"></i>
                       </button>
                       <button 
                         className="btn btn-outline-danger"
-                        onClick={() => handleDeleteContact(contact.contact_id)}
+                        onClick={() => onDeleteContact(contact.contact_id)}
                       >
                         <i className="bi bi-trash"></i>
                       </button>
@@ -95,19 +72,6 @@ const ContactsSection = ({ contacts, taxpayerId, canEdit, onUpdate }) => {
           <i className="bi bi-telephone-x display-4"></i>
           <p className="mt-2">Контактные данные не найдены</p>
         </div>
-      )}
-
-      {/* Модальные окна для добавления/редактирования контактов */}
-      {(showAddModal || editingContact) && (
-        <ContactModal
-          contact={editingContact}
-          taxpayerId={taxpayerId}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingContact(null);
-          }}
-          onSave={handleAddContactSuccess}
-        />
       )}
     </div>
   );

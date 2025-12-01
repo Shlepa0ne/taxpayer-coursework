@@ -180,7 +180,6 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   const { showCadastralFields, showTransportFields, showExtraValue, showRealEstateType, showObjectAddress } = getVisibleFields();
 
   return (
-    <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="modal-dialog modal-lg">
         <div className="modal-content">
           <div className="modal-header bg-primary text-white">
@@ -431,7 +430,6 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
           </form>
         </div>
       </div>
-    </div>
   );
 };
 

@@ -1,32 +1,18 @@
+// frontend/src/pages/worker/components/DocumentsSection.jsx
 import React, { useState, useEffect } from 'react';
-import { deleteDocument } from '../../../api/workersApi';
-import DocumentModal from './DocumentModal';
 import { formatDate } from '../../../utils/formatters';
 
-const DocumentsSection = ({ documents, taxpayerId, canEdit, onUpdate }) => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingDocument, setEditingDocument] = useState(null);
-
-  // ДОБАВИТЬ ОТЛАДОЧНУЮ ИНФОРМАЦИЮ
+const DocumentsSection = ({ 
+  documents, 
+  taxpayerId, 
+  canEdit, 
+  onAddDocument, // ДОБАВЛЕНО
+  onEditDocument, // ДОБАВЛЕНО
+  onDeleteDocument // ДОБАВЛЕНО
+}) => {
   useEffect(() => {
     console.log('DocumentsSection received documents:', documents);
-    if (documents && documents.length > 0) {
-      console.log('First document:', documents[0]);
-      console.log('Document type name:', documents[0].document_type_name);
-      console.log('Document type id:', documents[0].document_type_id);
-    }
   }, [documents]);
-
-  const handleDeleteDocument = async (documentId) => {
-    if (window.confirm('Вы уверены, что хотите удалить этот документ?')) {
-      try {
-        await deleteDocument(documentId);
-        onUpdate(taxpayerId);
-      } catch (error) {
-        console.error('Ошибка при удалении документа:', error);
-      }
-    }
-  };
 
   return (
     <div>
@@ -34,7 +20,7 @@ const DocumentsSection = ({ documents, taxpayerId, canEdit, onUpdate }) => {
         <div className="mb-3">
           <button 
             className="btn btn-primary"
-            onClick={() => setShowAddModal(true)}
+            onClick={() => onAddDocument()}
           >
             <i className="bi bi-plus-circle me-2"></i>
             Добавить документ
@@ -53,13 +39,13 @@ const DocumentsSection = ({ documents, taxpayerId, canEdit, onUpdate }) => {
                     <div className="btn-group btn-group-sm">
                       <button 
                         className="btn btn-outline-primary"
-                        onClick={() => setEditingDocument(doc)}
+                        onClick={() => onEditDocument(doc)}
                       >
                         <i className="bi bi-pencil"></i>
                       </button>
                       <button 
                         className="btn btn-outline-danger"
-                        onClick={() => handleDeleteDocument(doc.document_id)}
+                        onClick={() => onDeleteDocument(doc.document_id)}
                       >
                         <i className="bi bi-trash"></i>
                       </button>
@@ -100,23 +86,6 @@ const DocumentsSection = ({ documents, taxpayerId, canEdit, onUpdate }) => {
           <i className="bi bi-file-earmark-x display-4"></i>
           <p className="mt-2">Документы не найдены</p>
         </div>
-      )}
-
-      {/* Модальные окна для добавления/редактирования документов */}
-      {(showAddModal || editingDocument) && (
-        <DocumentModal
-          document={editingDocument}
-          taxpayerId={taxpayerId}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingDocument(null);
-          }}
-          onSave={() => {
-            setShowAddModal(false);
-            setEditingDocument(null);
-            onUpdate(taxpayerId);
-          }}
-        />
       )}
     </div>
   );
