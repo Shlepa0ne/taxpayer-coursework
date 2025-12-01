@@ -123,16 +123,6 @@ export const getObjectTypes = async () => {
   return data;
 };
 
-export const createTaxableObject = async (taxpayerId, objectData) => {
-  const { data } = await axiosInstance.post(`/worker/taxpayer/${taxpayerId}/objects/`, objectData);
-  return data;
-};
-
-export const updateTaxableObject = async (objectId, objectData) => {
-  const { data } = await axiosInstance.patch(`/worker/objects/${objectId}/`, objectData);
-  return data;
-};
-
 export const deleteTaxableObject = async (objectId) => {
   const { data } = await axiosInstance.delete(`/worker/objects/${objectId}/`);
   return data;
@@ -343,4 +333,30 @@ export const generateReport = async (reportParams) => {
     responseType: 'blob' // Важно для получения файла
   });
   return data;
+};
+
+export const createTaxableObject = async (taxpayerId, objectData) => {
+  console.log('API: Creating object for taxpayer', taxpayerId, 'with data:', objectData);
+  try {
+    const { data } = await axiosInstance.post(`/worker/taxpayer/${taxpayerId}/objects/`, objectData);
+    console.log('API: Object created successfully:', data);
+    return data;
+  } catch (error) {
+    console.error('API: Error creating object:', error);
+    console.error('API: Error response:', error.response?.data);
+    throw error;
+  }
+};
+
+export const updateTaxableObject = async (objectId, objectData) => {
+  console.log('API: Updating object', objectId, 'with data:', objectData);
+  try {
+    const { data } = await axiosInstance.patch(`/worker/objects/${objectId}/`, objectData);
+    console.log('API: Object updated successfully:', data);
+    return data;
+  } catch (error) {
+    console.error('API: Error updating object:', error);
+    console.error('API: Error response:', error.response?.data);
+    throw error;
+  }
 };

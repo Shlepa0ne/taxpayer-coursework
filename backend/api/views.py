@@ -1283,16 +1283,41 @@ class CreateContactAPIView(APIView):
 
     def post(self, request, taxpayer_id):
         try:
+            print(f"DEBUG: Creating contact for taxpayer {taxpayer_id}")
+            print(f"DEBUG: Request data: {request.data}")
+            
             taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
-            serializer = ContactCreateSerializer(data=request.data)
+            
+            # Проверяем и подготавливаем данные
+            data = request.data.copy()
+            
+            # Убедимся, что contact_type передается как число
+            if 'contact_type' in data:
+                try:
+                    data['contact_type'] = int(data['contact_type'])
+                except (ValueError, TypeError):
+                    return Response(
+                        {'error': 'Некорректный тип контакта'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            serializer = ContactCreateSerializer(data=data)
             
             if serializer.is_valid():
+                print(f"DEBUG: Serializer is valid")
                 contact = serializer.save(taxpayer=taxpayer)
+                print(f"DEBUG: Contact created with ID: {contact.contact_id}")
                 return Response(ContactDataSerializer(contact).data, status=status.HTTP_201_CREATED)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
+            else:
+                print(f"DEBUG: Serializer errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
         except Taxpayer.DoesNotExist:
+            print(f"DEBUG: Taxpayer {taxpayer_id} not found")
             return Response({'error': 'Налогоплательщик не найден'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(f"DEBUG: Exception: {str(e)}")
+            return Response({'error': f'Ошибка при создании контакта: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ContactDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1336,12 +1361,33 @@ class CreateObjectAPIView(APIView):
 
     def post(self, request, taxpayer_id):
         try:
+            print(f"DEBUG: Creating object for taxpayer {taxpayer_id}")
+            print(f"DEBUG: Request data: {request.data}")
+            
             with transaction.atomic():
                 taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
-                object_serializer = ObjectCreateSerializer(data=request.data)
+                
+                # Подготавливаем данные для сериализатора
+                data = request.data.copy()
+                
+                # Преобразуем числовые поля
+                numeric_fields = ['cadastral_value', 'engine_power', 'extra_value']
+                for field in numeric_fields:
+                    if field in data and data[field] == '':
+                        data[field] = None
+                
+                # Если real_estate_type пустое, устанавливаем None
+                if 'real_estate_type' in data and data['real_estate_type'] == '':
+                    data['real_estate_type'] = None
+                
+                print(f"DEBUG: Processed data for object: {data}")
+                
+                object_serializer = ObjectCreateSerializer(data=data)
                 
                 if object_serializer.is_valid():
+                    print(f"DEBUG: Object serializer is valid")
                     taxable_object = object_serializer.save()
+                    print(f"DEBUG: Object created with ID: {taxable_object.object_id}")
                     
                     # Создаем запись о владении
                     ownership_data = {
@@ -1351,6 +1397,8 @@ class CreateObjectAPIView(APIView):
                         'ownership_end_date': request.data.get('ownership_end_date') or None
                     }
                     
+                    print(f"DEBUG: Ownership data: {ownership_data}")
+                    
                     ownership_serializer = ObjectOwnershipCreateSerializer(data=ownership_data)
                     if ownership_serializer.is_valid():
                         ownership_serializer.save()
@@ -1359,15 +1407,21 @@ class CreateObjectAPIView(APIView):
                             status=status.HTTP_201_CREATED
                         )
                     else:
+                        print(f"DEBUG: Ownership serializer errors: {ownership_serializer.errors}")
                         taxable_object.delete()
                         return Response(ownership_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 
+                print(f"DEBUG: Object serializer errors: {object_serializer.errors}")
                 return Response(object_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 
         except Taxpayer.DoesNotExist:
+            print(f"DEBUG: Taxpayer {taxpayer_id} not found")
             return Response({'error': 'Налогоплательщик не найден'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            print(f"DEBUG: Exception: {str(e)}")
+            import traceback
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
+            return Response({'error': f'Ошибка при создании объекта: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ObjectDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
