@@ -996,22 +996,6 @@ NEW.ownership_end_date;
         END IF; 
     END IF; 
  
-    -- Проверка для таблицы tax_accrual 
-    IF TG_TABLE_NAME = 'tax_accrual' THEN 
-        -- Дата начисления не может быть в будущем 
-        IF NEW.accrual_date > CURRENT_DATE THEN 
-            RAISE EXCEPTION 'Дата начисления не может быть в будущем: 
-%', NEW.accrual_date; 
-        END IF; 
-         
-        -- Срок уплаты не может быть раньше даты начисления 
-        IF NEW.due_date IS NOT NULL AND NEW.accrual_date > 
-NEW.due_date THEN 
-            RAISE EXCEPTION 'Срок уплаты (%) не может быть раньше даты 
-начисления (%)', NEW.due_date, NEW.accrual_date; 
-        END IF; 
-    END IF; 
- 
     RETURN NEW; 
 END; 
 $$;
@@ -1150,8 +1134,8 @@ CREATE FUNCTION public.validate_phone(phone text) RETURNS boolean
     AS $_$ 
 BEGIN 
     -- Российские номера: +7, 8 
-    RETURN phone ~ '^(\+7|8|7)?[\s\-]?\(?[0-9]{3}\)?[\s\-]?[0
-9]{3}[\s\-]?[0-9]{2}[\s\-]?[0-9]{2}$'; 
+    RETURN phone ~ '^(\+7|8|7)[\s\-]?\(?[0-9]{3}\)?[\s\-]?[0-9]{3}[\s\-]?[0-9]{2}[\s\-]?[0-9]{2}$'
+           OR phone ~ '^(\+7|8|7)\([0-9]{3}\)[0-9]{3}[\-]?[0-9]{2}[\-]?[0-9]{2}$';
 END; 
 $_$;
 

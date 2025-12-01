@@ -4,15 +4,9 @@ import { createTaxableObject, updateTaxableObject, getObjectTypes } from '../../
 // Модальное окно для объектов
 const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   const [formData, setFormData] = useState({
-<<<<<<< HEAD
-<<<<<<< Updated upstream
     object_type_id: '',
-=======
     object_type: '',
->>>>>>> Stashed changes
-=======
     object_type: '',  // ИЗМЕНЕНО: было object_type_id
->>>>>>> fbbcef4ac06cc04019709020e5b9c010820d72e8
     object_name: '',
     object_address: '',
     cadastral_number: '',
@@ -29,8 +23,6 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   const [objectTypes, setObjectTypes] = useState([]);
   const [realEstateTypes, setRealEstateTypes] = useState([]);
   const [loading, setLoading] = useState(false);
-<<<<<<< HEAD
-<<<<<<< Updated upstream
 
   useEffect(() => {
     // Заглушка для типов объектов
@@ -40,7 +32,6 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
       { object_type_id: 3, object_type_name: 'прочее имущество' }
     ];
     setObjectTypes(mockObjectTypes);
-=======
   const [loadingTypes, setLoadingTypes] = useState(true);
 
   useEffect(() => {
@@ -143,7 +134,6 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
     };
 
     console.log('Sending to API:', submitData);
->>>>>>> Stashed changes
 
     if (object) {
       setFormData({
@@ -167,13 +157,11 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
     e.preventDefault();
     setLoading(true);
 
-=======
   const [loadingTypes, setLoadingTypes] = useState(true);  // ДОБАВЛЕНО
 
   useEffect(() => {
   const loadData = async () => {
     setLoadingTypes(true);
->>>>>>> fbbcef4ac06cc04019709020e5b9c010820d72e8
     try {
       // Загружаем типы объектов с сервера
       const types = await getObjectTypes();
@@ -222,22 +210,22 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
           ownership_end_date: object.ownership?.ownership_end_date || ''
         });
       }
-    } catch (error) {
-      console.error('Ошибка загрузки типов объектов:', error);
-      // Запасной вариант
-      const mockObjectTypes = [
-        { object_type_id: 1, object_type_name: 'недвижимость' },
-        { object_type_id: 2, object_type_name: 'транспорт' },
-        { object_type_id: 3, object_type_name: 'прочее имущество' }
-      ];
-      setObjectTypes(mockObjectTypes);
-    } finally {
-      setLoadingTypes(false);
-    }
-  };
+      } catch (error) {
+        console.error('Ошибка загрузки типов объектов:', error);
+        // Запасной вариант
+        const mockObjectTypes = [
+          { object_type_id: 1, object_type_name: 'недвижимость' },
+          { object_type_id: 2, object_type_name: 'транспорт' },
+          { object_type_id: 3, object_type_name: 'прочее имущество' }
+        ];
+        setObjectTypes(mockObjectTypes);
+      } finally {
+        setLoadingTypes(false);
+      }
+    };
 
-  loadData();
-}, [object]); // ДОБАВЛЕНО object в зависимости
+    loadData();
+  }, [object]); 
 
   const handleSubmit = async (e) => {
   e.preventDefault();
