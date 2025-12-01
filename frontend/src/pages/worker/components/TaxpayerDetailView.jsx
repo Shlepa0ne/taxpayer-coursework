@@ -13,7 +13,13 @@ const TaxpayerDetailView = ({
   onRequestClick, 
   onDeclarationClick,
   onInspectionClick,
-  onAccrualClick, // ДОБАВЛЕН
+  onAccrualClick,
+  onContactClick, 
+  onDocumentClick, 
+  onObjectClick, 
+  onDeleteContact, 
+  onDeleteDocument, 
+  onDeleteObject, 
   canChangeStatus, 
   onTaxpayerUpdate, 
   currentWorker 
@@ -264,7 +270,9 @@ const TaxpayerDetailView = ({
             documents={taxpayer.documents || []}
             taxpayerId={taxpayer.taxpayer_id}
             canEdit={canChangeStatus}
-            onUpdate={onTaxpayerUpdate}
+            onAddDocument={() => onDocumentClick(null)} 
+            onEditDocument={onDocumentClick} 
+            onDeleteDocument={onDeleteDocument} 
           />
         )}
 
@@ -274,7 +282,9 @@ const TaxpayerDetailView = ({
             contacts={taxpayer.contacts || []}
             taxpayerId={taxpayer.taxpayer_id}
             canEdit={canChangeStatus}
-            onUpdate={onTaxpayerUpdate}
+            onAddContact={() => onContactClick(null)} 
+            onEditContact={onContactClick} 
+            onDeleteContact={onDeleteContact} 
           />
         )}
 
@@ -284,7 +294,9 @@ const TaxpayerDetailView = ({
             objects={taxpayer.taxable_objects || []}
             taxpayerId={taxpayer.taxpayer_id}
             canEdit={canChangeStatus}
-            onUpdate={onTaxpayerUpdate}
+            onAddObject={() => onObjectClick(null)}
+            onEditObject={onObjectClick}
+            onDeleteObject={onDeleteObject} 
           />
         )}
 
@@ -322,7 +334,7 @@ const TaxpayerDetailView = ({
         {activeTab === 'accruals' && (
           <TaxAccrualsTab 
             accruals={taxpayer.accruals || []} 
-            onAccrualClick={onAccrualClick} // ПЕРЕДАЕМ ФУНКЦИЮ КЛИКА
+            onAccrualClick={onAccrualClick} 
             canEdit={isSeniorInspector}
           />
         )}

@@ -10,9 +10,9 @@ import {
   getCurrentWorker,
   updateDeclarationStatus,
   updateTaxAccrual,
-  deleteContact, // ДОБАВЛЕНО
-  deleteDocument, // ДОБАВЛЕНО
-  deleteTaxableObject // ДОБАВЛЕНО
+  deleteContact,
+  deleteDocument,
+  deleteTaxableObject
 } from '../../api/workersApi';
 import Spinner from '../../components/ui/Spinner';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -20,9 +20,9 @@ import RequestDetailModal from './components/RequestDetailModal';
 import DeclarationDetailModal from './components/DeclarationDetailModal';
 import InspectionDetailModal from './components/InspectionDetailModal';
 import AccrualDetailModal from './components/AccrualDetailModal';
-import ContactModal from './components/ContactModal'; // ДОБАВЛЕНО
-import DocumentModal from './components/DocumentModal'; // ДОБАВЛЕНО
-import ObjectModal from './components/ObjectModal'; // ДОБАВЛЕНО
+import ContactModal from './components/ContactModal';
+import DocumentModal from './components/DocumentModal';
+import ObjectModal from './components/ObjectModal';
 import TaxpayerDetailView from './components/TaxpayerDetailView';
 import SearchForm from './components/SearchForm';
 import SearchResults from './components/SearchResults';
@@ -31,12 +31,13 @@ import { getRiskScoreColor, getRiskScoreText, formatCurrency } from '../../utils
 const WorkerTaxpayerSearch = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchResults, setSearchResults] = useState([]);
-  const [selectedTaxpayer, setSelectedTaxpayer] = useState(null);
+  const [expandedTaxpayerId, setExpandedTaxpayerId] = useState(null);
   const [regions, setRegions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentWorker, setCurrentWorker] = useState(null);
+  const [displayCount, setDisplayCount] = useState(10);
   const queryClient = useQueryClient();
 
   // Состояния для модальных окон
@@ -49,13 +50,16 @@ const WorkerTaxpayerSearch = () => {
   const [selectedAccrual, setSelectedAccrual] = useState(null);
   const [showAccrualModal, setShowAccrualModal] = useState(false);
   
-  // ДОБАВЛЕНО: Состояния для новых модальных окон
+  // Состояния для новых модальных окон
   const [selectedContact, setSelectedContact] = useState(null);
   const [showContactModal, setShowContactModal] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [selectedObject, setSelectedObject] = useState(null);
   const [showObjectModal, setShowObjectModal] = useState(false);
+
+  // Добавляем состояние для хранения деталей налогоплательщиков
+  const [taxpayerDetails, setTaxpayerDetails] = useState({});
 
   // Загрузка информации о текущем сотруднике
   useEffect(() => {
@@ -97,6 +101,10 @@ const WorkerTaxpayerSearch = () => {
     try {
       const data = await searchTaxpayers({ type: 'simple', query: inn });
       setSearchResults(data.results || []);
+      // Сбрасываем счетчик отображения при новом поиске
+      setDisplayCount(10);
+      // Закрываем все открытые детали
+      setExpandedTaxpayerId(null);
       
       if (data.results && data.results.length === 1) {
         await handleTaxpayerSelect(data.results[0].taxpayer_id);
@@ -112,7 +120,11 @@ const WorkerTaxpayerSearch = () => {
   const handleSearch = async (searchParams) => {
     setLoading(true);
     setError('');
-    setSelectedTaxpayer(null);
+    // Сбрасываем расширенного налогоплательщика при новом поиске
+    setExpandedTaxpayerId(null);
+    setTaxpayerDetails({});
+    // Сбрасываем счетчик отображения
+    setDisplayCount(10);
 
     try {
       const data = await searchTaxpayers(searchParams);
@@ -132,8 +144,9 @@ const WorkerTaxpayerSearch = () => {
       queryClient.invalidateQueries(['taxpayerDetail']);
       setShowRequestModal(false);
       setSelectedRequest(null);
-      if (selectedTaxpayer) {
-        handleTaxpayerSelect(selectedTaxpayer.taxpayer_id);
+      // Обновляем детали текущего налогоплательщика
+      if (expandedTaxpayerId) {
+        handleTaxpayerSelect(expandedTaxpayerId);
       }
     },
   });
@@ -146,9 +159,12 @@ const WorkerTaxpayerSearch = () => {
       });
       
       // Обновляем данные налогоплательщика после изменения
-      if (selectedTaxpayer) {
-        const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
-        setSelectedTaxpayer(updatedTaxpayer);
+      if (expandedTaxpayerId) {
+        const updatedTaxpayer = await getTaxpayerDetail(expandedTaxpayerId);
+        setTaxpayerDetails(prev => ({
+          ...prev,
+          [expandedTaxpayerId]: updatedTaxpayer
+        }));
       }
     } catch (error) {
       console.error('WorkerTaxpayerSearch: Update failed', error);
@@ -164,9 +180,12 @@ const WorkerTaxpayerSearch = () => {
       // После успешного обновления закрываем модалку и обновляем данные
       setShowInspectionModal(false);
       setSelectedInspection(null);
-      if (selectedTaxpayer) {
-        const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
-        setSelectedTaxpayer(updatedTaxpayer);
+      if (expandedTaxpayerId) {
+        const updatedTaxpayer = await getTaxpayerDetail(expandedTaxpayerId);
+        setTaxpayerDetails(prev => ({
+          ...prev,
+          [expandedTaxpayerId]: updatedTaxpayer
+        }));
       }
     } catch (error) {
       console.error('Ошибка при обновлении проверки:', error);
@@ -179,9 +198,12 @@ const WorkerTaxpayerSearch = () => {
       await updateTaxAccrual(accrualId, updateData);
       
       // Обновляем данные налогоплательщика после изменения
-      if (selectedTaxpayer) {
-        const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
-        setSelectedTaxpayer(updatedTaxpayer);
+      if (expandedTaxpayerId) {
+        const updatedTaxpayer = await getTaxpayerDetail(expandedTaxpayerId);
+        setTaxpayerDetails(prev => ({
+          ...prev,
+          [expandedTaxpayerId]: updatedTaxpayer
+        }));
       }
       
       setShowAccrualModal(false);
@@ -193,14 +215,17 @@ const WorkerTaxpayerSearch = () => {
     }
   };
 
-  // ДОБАВЛЕНО: Функция для удаления контакта
+  // Функция для удаления контакта
   const handleDeleteContact = async (contactId) => {
     if (window.confirm('Вы уверены, что хотите удалить этот контакт?')) {
       try {
         await deleteContact(contactId);
-        if (selectedTaxpayer) {
-          const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
-          setSelectedTaxpayer(updatedTaxpayer);
+        if (expandedTaxpayerId) {
+          const updatedTaxpayer = await getTaxpayerDetail(expandedTaxpayerId);
+          setTaxpayerDetails(prev => ({
+            ...prev,
+            [expandedTaxpayerId]: updatedTaxpayer
+          }));
         }
       } catch (error) {
         console.error('Ошибка при удалении контакта:', error);
@@ -209,14 +234,17 @@ const WorkerTaxpayerSearch = () => {
     }
   };
 
-  // ДОБАВЛЕНО: Функция для удаления документа
+  // Функция для удаления документа
   const handleDeleteDocument = async (documentId) => {
     if (window.confirm('Вы уверены, что хотите удалить этот документ?')) {
       try {
         await deleteDocument(documentId);
-        if (selectedTaxpayer) {
-          const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
-          setSelectedTaxpayer(updatedTaxpayer);
+        if (expandedTaxpayerId) {
+          const updatedTaxpayer = await getTaxpayerDetail(expandedTaxpayerId);
+          setTaxpayerDetails(prev => ({
+            ...prev,
+            [expandedTaxpayerId]: updatedTaxpayer
+          }));
         }
       } catch (error) {
         console.error('Ошибка при удалении документа:', error);
@@ -225,14 +253,17 @@ const WorkerTaxpayerSearch = () => {
     }
   };
 
-  // ДОБАВЛЕНО: Функция для удаления объекта
+  // Функция для удаления объекта
   const handleDeleteObject = async (objectId) => {
     if (window.confirm('Вы уверены, что хотите удалить этот объект?')) {
       try {
         await deleteTaxableObject(objectId);
-        if (selectedTaxpayer) {
-          const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
-          setSelectedTaxpayer(updatedTaxpayer);
+        if (expandedTaxpayerId) {
+          const updatedTaxpayer = await getTaxpayerDetail(expandedTaxpayerId);
+          setTaxpayerDetails(prev => ({
+            ...prev,
+            [expandedTaxpayerId]: updatedTaxpayer
+          }));
         }
       } catch (error) {
         console.error('Ошибка при удалении объекта:', error);
@@ -254,9 +285,12 @@ const WorkerTaxpayerSearch = () => {
 
   // Функция для клика по декларации
   const handleDeclarationClick = async (declarationId) => {
-    if (!selectedTaxpayer) return;
+    if (!expandedTaxpayerId) return;
     
-    const declaration = selectedTaxpayer.declarations.find(d => d.declaration_id === declarationId);
+    const taxpayerDetail = taxpayerDetails[expandedTaxpayerId];
+    if (!taxpayerDetail) return;
+    
+    const declaration = taxpayerDetail.declarations?.find(d => d.declaration_id === declarationId);
     if (declaration) {
       setSelectedDeclaration(declaration);
       setShowDeclarationModal(true);
@@ -265,9 +299,12 @@ const WorkerTaxpayerSearch = () => {
 
   // Функция для клика по проверке
   const handleInspectionClick = async (inspectionId) => {
-    if (!selectedTaxpayer) return;
+    if (!expandedTaxpayerId) return;
     
-    const inspection = selectedTaxpayer.inspections.find(i => i.inspection_id === inspectionId);
+    const taxpayerDetail = taxpayerDetails[expandedTaxpayerId];
+    if (!taxpayerDetail) return;
+    
+    const inspection = taxpayerDetail.inspections?.find(i => i.inspection_id === inspectionId);
     if (inspection) {
       setSelectedInspection(inspection);
       setShowInspectionModal(true);
@@ -276,38 +313,44 @@ const WorkerTaxpayerSearch = () => {
 
   // Функция для клика по начислению
   const handleAccrualClick = async (accrualId) => {
-    if (!selectedTaxpayer) return;
+    if (!expandedTaxpayerId) return;
     
-    const accrual = selectedTaxpayer.accruals?.find(a => a.tax_accrual_id === accrualId);
+    const taxpayerDetail = taxpayerDetails[expandedTaxpayerId];
+    if (!taxpayerDetail) return;
+    
+    const accrual = taxpayerDetail.accruals?.find(a => a.tax_accrual_id === accrualId);
     if (accrual) {
       setSelectedAccrual(accrual);
       setShowAccrualModal(true);
     }
   };
 
-  // ДОБАВЛЕНО: Функция для открытия контакта
+  // Функция для открытия контакта
   const handleContactClick = async (contact = null) => {
     setSelectedContact(contact);
     setShowContactModal(true);
   };
 
-  // ДОБАВЛЕНО: Функция для открытия документа
+  // Функция для открытия документа
   const handleDocumentClick = async (document = null) => {
     setSelectedDocument(document);
     setShowDocumentModal(true);
   };
 
-  // ДОБАВЛЕНО: Функция для открытия объекта
+  // Функция для открытия объекта
   const handleObjectClick = async (object = null) => {
     setSelectedObject(object);
     setShowObjectModal(true);
   };
 
-  // ДОБАВЛЕНО: Функция для сохранения и обновления данных
+  // Функция для сохранения и обновления данных
   const handleItemSave = async () => {
-    if (selectedTaxpayer) {
-      const updatedTaxpayer = await getTaxpayerDetail(selectedTaxpayer.taxpayer_id);
-      setSelectedTaxpayer(updatedTaxpayer);
+    if (expandedTaxpayerId) {
+      const updatedTaxpayer = await getTaxpayerDetail(expandedTaxpayerId);
+      setTaxpayerDetails(prev => ({
+        ...prev,
+        [expandedTaxpayerId]: updatedTaxpayer
+      }));
     }
   };
 
@@ -329,23 +372,58 @@ const WorkerTaxpayerSearch = () => {
   };
 
   const handleTaxpayerSelect = async (taxpayerId) => {
+    // Если кликаем на уже открытого налогоплательщика, закрываем его
+    if (expandedTaxpayerId === taxpayerId) {
+      setExpandedTaxpayerId(null);
+      return;
+    }
+    
     setDetailLoading(true);
+    setExpandedTaxpayerId(taxpayerId);
+    
     try {
-      const data = await getTaxpayerDetail(taxpayerId);
-      setSelectedTaxpayer(data);
+      // Проверяем, есть ли детали в кэше
+      if (!taxpayerDetails[taxpayerId]) {
+        const data = await getTaxpayerDetail(taxpayerId);
+        setTaxpayerDetails(prev => ({
+          ...prev,
+          [taxpayerId]: data
+        }));
+      }
     } catch (err) {
       setError('Ошибка при загрузке детальной информации');
       console.error('Detail error:', err);
+      setExpandedTaxpayerId(null);
     } finally {
       setDetailLoading(false);
     }
   };
 
+  const handleTaxpayerUpdate = async (taxpayerId) => {
+    if (expandedTaxpayerId === taxpayerId) {
+      const updatedTaxpayer = await getTaxpayerDetail(taxpayerId);
+      setTaxpayerDetails(prev => ({
+        ...prev,
+        [taxpayerId]: updatedTaxpayer
+      }));
+    }
+  };
+
   const clearSearch = () => {
     setSearchResults([]);
-    setSelectedTaxpayer(null);
+    setExpandedTaxpayerId(null);
+    setTaxpayerDetails({});
+    setDisplayCount(10);
     setError('');
   };
+
+  const handleLoadMore = () => {
+    setDisplayCount(prev => prev + 10);
+  };
+
+  // Получаем отображаемые результаты (первые displayCount)
+  const displayedResults = searchResults.slice(0, displayCount);
+  const hasMore = searchResults.length > displayCount;
 
   return (
     <div>
@@ -369,43 +447,116 @@ const WorkerTaxpayerSearch = () => {
         </div>
       )}
 
-      {/* Результаты поиска */}
-      <SearchResults 
-        searchResults={searchResults}
-        onTaxpayerSelect={handleTaxpayerSelect}
-        getRiskScoreColor={getRiskScoreColor}
-        getRiskScoreText={getRiskScoreText}
-      />
-
-      {/* Детальная информация */}
-      {selectedTaxpayer && (
-        <div className="card border-0 shadow-sm">
-          <div className="card-header bg-primary text-white">
+      {/* Результаты поиска с деталями под строкой */}
+      {searchResults.length > 0 && (
+        <div className="card border-0 shadow-sm mb-4">
+          <div className="card-header bg-light">
             <h5 className="card-title mb-0">
-              <i className="bi bi-person-badge me-2"></i>
-              Детальная информация о налогоплательщике
+              <i className="bi bi-list-ul me-2"></i>
+              Результаты поиска ({searchResults.length})
             </h5>
           </div>
-          <div className="card-body">
-            {detailLoading ? (
-              <Spinner />
-            ) : (
-              <TaxpayerDetailView 
-                taxpayer={selectedTaxpayer} 
-                onRequestClick={handleRequestClick}
-                onDeclarationClick={handleDeclarationClick}
-                onInspectionClick={handleInspectionClick}
-                onAccrualClick={handleAccrualClick}
-                onContactClick={handleContactClick} // ДОБАВЛЕНО
-                onDocumentClick={handleDocumentClick} // ДОБАВЛЕНО
-                onObjectClick={handleObjectClick} // ДОБАВЛЕНО
-                onDeleteContact={handleDeleteContact} // ДОБАВЛЕНО
-                onDeleteDocument={handleDeleteDocument} // ДОБАВЛЕНО
-                onDeleteObject={handleDeleteObject} // ДОБАВЛЕНО
-                canChangeStatus={canChangeRequestStatus}
-                onTaxpayerUpdate={handleTaxpayerSelect}
-                currentWorker={currentWorker}
-              />
+          <div className="card-body p-0">
+            <div className="list-group list-group-flush">
+              {displayedResults.map(taxpayer => (
+                <div key={taxpayer.taxpayer_id}>
+                  <button
+                    className="list-group-item list-group-item-action"
+                    onClick={() => handleTaxpayerSelect(taxpayer.taxpayer_id)}
+                  >
+                    <div className="d-flex justify-content-between align-items-start">
+                      <div>
+                        <h6 className="mb-1">
+                          {taxpayer.fio || taxpayer.full_name || taxpayer.short_name || 'Без названия'}
+                          {taxpayer.payer_type_id === 1 && (
+                            <span className="badge bg-primary ms-2">Физ. лицо</span>
+                          )}
+                          {taxpayer.payer_type_id === 2 && (
+                            <span className="badge bg-warning ms-2">ИП</span>
+                          )}
+                          {taxpayer.payer_type_id === 3 && (
+                            <span className="badge bg-info ms-2">Юр. лицо</span>
+                          )}
+                        </h6>
+                        <p className="mb-1 text-muted">
+                          <strong>ИНН:</strong> {taxpayer.inn}
+                          {taxpayer.ogrn && (
+                            <> | <strong>ОГРН:</strong> {taxpayer.ogrn}</>
+                          )}
+                        </p>
+                        <p className="mb-1 text-muted small">
+                          <strong>Адрес:</strong> {taxpayer.registration_address || 'Не указан'}
+                        </p>
+                        <p className="mb-0 text-muted small">
+                          <strong>Регион:</strong> {taxpayer.region_name} | 
+                          <strong> Налоговый режим:</strong> {taxpayer.tax_regime_name}
+                        </p>
+                      </div>
+                      <div className="text-end">
+                        <div className={`badge bg-${getRiskScoreColor(taxpayer.risk_score)} mb-2`}>
+                          RiskScore: {taxpayer.risk_score ?? 'Нет данных'}
+                        </div>
+                        <br />
+                        <small className="text-muted">
+                          {getRiskScoreText(taxpayer.risk_score)}
+                        </small>
+                        <div className="mt-2">
+                          <i className={`bi bi-chevron-${expandedTaxpayerId === taxpayer.taxpayer_id ? 'up' : 'down'}`}></i>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                  
+                  {/* Детальная информация показывается прямо под строчкой */}
+                  {expandedTaxpayerId === taxpayer.taxpayer_id && (
+                    <div className="border-start border-end border-bottom bg-white">
+                      <div className="p-3">
+                        {detailLoading ? (
+                          <div className="text-center py-4">
+                            <Spinner />
+                            <p className="mt-2">Загрузка деталей...</p>
+                          </div>
+                        ) : taxpayerDetails[taxpayer.taxpayer_id] ? (
+                          <TaxpayerDetailView
+                            taxpayer={taxpayerDetails[taxpayer.taxpayer_id]}
+                            onRequestClick={handleRequestClick}
+                            onDeclarationClick={handleDeclarationClick}
+                            onInspectionClick={handleInspectionClick}
+                            onAccrualClick={handleAccrualClick}
+                            onContactClick={handleContactClick}
+                            onDocumentClick={handleDocumentClick}
+                            onObjectClick={handleObjectClick}
+                            onDeleteContact={handleDeleteContact}
+                            onDeleteDocument={handleDeleteDocument}
+                            onDeleteObject={handleDeleteObject}
+                            canChangeStatus={canChangeRequestStatus}
+                            onTaxpayerUpdate={handleTaxpayerUpdate}
+                            currentWorker={currentWorker}
+                          />
+                        ) : (
+                          <div className="text-center text-muted py-4">
+                            <i className="bi bi-exclamation-triangle display-4"></i>
+                            <p className="mt-2">Не удалось загрузить детальную информацию</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            {/* Кнопка "Загрузить еще" */}
+            {hasMore && (
+              <div className="text-center p-3 border-top">
+                <button 
+                  className="btn btn-outline-primary"
+                  onClick={handleLoadMore}
+                >
+                  <i className="bi bi-arrow-down-circle me-2"></i>
+                  Показать еще ({searchResults.length - displayCount})
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -475,12 +626,12 @@ const WorkerTaxpayerSearch = () => {
         />
       )}
 
-      {/* ДОБАВЛЕНО: Модальное окно для контактов */}
-      {showContactModal && selectedTaxpayer && (
+      {/* Модальное окно для контактов */}
+      {showContactModal && expandedTaxpayerId && (
         <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <ContactModal
             contact={selectedContact}
-            taxpayerId={selectedTaxpayer.taxpayer_id}
+            taxpayerId={expandedTaxpayerId}
             onClose={() => {
               setShowContactModal(false);
               setSelectedContact(null);
@@ -494,12 +645,12 @@ const WorkerTaxpayerSearch = () => {
         </div>
       )}
 
-      {/* ДОБАВЛЕНО: Модальное окно для документов */}
-      {showDocumentModal && selectedTaxpayer && (
+      {/* Модальное окно для документов */}
+      {showDocumentModal && expandedTaxpayerId && (
         <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <DocumentModal
             document={selectedDocument}
-            taxpayerId={selectedTaxpayer.taxpayer_id}
+            taxpayerId={expandedTaxpayerId}
             onClose={() => {
               setShowDocumentModal(false);
               setSelectedDocument(null);
@@ -513,12 +664,12 @@ const WorkerTaxpayerSearch = () => {
         </div>
       )}
 
-      {/* ДОБАВЛЕНО: Модальное окно для объектов */}
-      {showObjectModal && selectedTaxpayer && (
+      {/* Модальное окно для объектов */}
+      {showObjectModal && expandedTaxpayerId && (
         <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <ObjectModal
             object={selectedObject}
-            taxpayerId={selectedTaxpayer.taxpayer_id}
+            taxpayerId={expandedTaxpayerId}
             onClose={() => {
               setShowObjectModal(false);
               setSelectedObject(null);

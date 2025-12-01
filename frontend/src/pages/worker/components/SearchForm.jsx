@@ -98,6 +98,8 @@ const SearchForm = ({ onSearch, onClear, loading, regions }) => {
                 </div>
                 <div className="form-text">
                   Поиск по всем полям: ИНН, ФИО, название организации, ОГРН, адрес регистрации
+                  <br />
+                  <small className="text-muted mt-2">Показывается по 10 результатов, нажмите "Показать еще" для загрузки следующих</small>
                 </div>
               </div>
             </div>
@@ -189,6 +191,11 @@ const SearchForm = ({ onSearch, onClear, loading, regions }) => {
                   onChange={(e) => handleAdvancedFilterChange('address', e.target.value)}
                 />
               </div>
+              
+              <div className="form-text mb-3">
+                    <small className="text-muted">Показывается по 10 результатов, нажмите "Показать еще" для загрузки следующих</small>
+              </div>
+
               <div className="col-12">
                 <div className="d-flex gap-2">
                   <button type="submit" className="btn btn-primary" disabled={loading}>
