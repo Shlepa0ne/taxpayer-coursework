@@ -4,7 +4,11 @@ import { createTaxableObject, updateTaxableObject } from '../../../api/workersAp
 // Модальное окно для объектов
 const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   const [formData, setFormData] = useState({
+<<<<<<< Updated upstream
     object_type_id: '',
+=======
+    object_type: '',
+>>>>>>> Stashed changes
     object_name: '',
     object_address: '',
     cadastral_number: '',
@@ -19,6 +23,7 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   });
   const [objectTypes, setObjectTypes] = useState([]);
   const [loading, setLoading] = useState(false);
+<<<<<<< Updated upstream
 
   useEffect(() => {
     // Заглушка для типов объектов
@@ -28,6 +33,110 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
       { object_type_id: 3, object_type_name: 'прочее имущество' }
     ];
     setObjectTypes(mockObjectTypes);
+=======
+  const [loadingTypes, setLoadingTypes] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoadingTypes(true);
+      try {
+        // Загружаем типы объектов с сервера
+        const types = await getObjectTypes();
+        console.log('Loaded object types:', types);
+        setObjectTypes(types);
+        
+        // Заглушка для типов недвижимости
+        const mockRealEstateTypes = [
+          { real_estate_type_id: 1, real_estate_type_name: 'Квартира' },
+          { real_estate_type_id: 2, real_estate_type_name: 'Дом' },
+          { real_estate_type_id: 3, real_estate_type_name: 'Земельный участок' },
+          { real_estate_type_id: 4, real_estate_type_name: 'Коммерческая недвижимость' }
+        ];
+        setRealEstateTypes(mockRealEstateTypes);
+        
+        // Если редактируем объект, устанавливаем его тип
+        if (object) {
+          console.log('Editing object data:', object);
+          
+          // ВАЖНО: Проверяем, откуда берется тип объекта
+          // object может содержать object_type_id напрямую или через object_type
+          const objectTypeId = object.object_type_id || 
+                              (object.object_type && object.object_type.object_type_id) ||
+                              '';
+          
+          const realEstateTypeId = object.real_estate_type_id ||
+                                  (object.real_estate_type && object.real_estate_type.real_estate_type_id) ||
+                                  null;
+          
+          console.log('Object type ID:', objectTypeId);
+          console.log('Real estate type ID:', realEstateTypeId);
+          
+          setFormData({
+            object_type: objectTypeId || '',
+            object_name: object.object_name || '',
+            object_address: object.object_address || '',
+            cadastral_number: object.cadastral_number || '',
+            cadastral_value: object.cadastral_value || '',
+            transport_vin: object.transport_vin || '',
+            registration_plate: object.registration_plate || '',
+            transport_model: object.transport_model || '',
+            engine_power: object.engine_power || '',
+            extra_value: object.extra_value || '',
+            real_estate_type: realEstateTypeId || null,
+            ownership_start_date: object.ownership?.ownership_start_date || '',
+            ownership_end_date: object.ownership?.ownership_end_date || ''
+          });
+        }
+      } catch (error) {
+        console.error('Ошибка загрузки типов объектов:', error);
+        // Запасной вариант
+        const mockObjectTypes = [
+          { object_type_id: 1, object_type_name: 'недвижимость' },
+          { object_type_id: 2, object_type_name: 'транспорт' },
+          { object_type_id: 3, object_type_name: 'прочее имущество' }
+        ];
+        setObjectTypes(mockObjectTypes);
+      } finally {
+        setLoadingTypes(false);
+      }
+    };
+
+    loadData();
+  }, [object]);
+
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
+
+  try {
+    console.log('Submitting object data:', formData);
+    
+    // Функция для форматирования числовых полей
+    const formatNumberField = (value) => {
+      if (value === '' || value === null || value === undefined) return null;
+      const num = Number(value);
+      return isNaN(num) ? null : num;
+    };
+
+    // Подготавливаем данные для отправки
+    const submitData = {
+      object_type: formData.object_type,
+      object_name: formData.object_name,
+      object_address: formData.object_address || null,
+      cadastral_number: formData.cadastral_number || null,
+      cadastral_value: formatNumberField(formData.cadastral_value),
+      transport_vin: formData.transport_vin || null,
+      registration_plate: formData.registration_plate || null,
+      transport_model: formData.transport_model || null,
+      engine_power: formatNumberField(formData.engine_power),
+      extra_value: formatNumberField(formData.extra_value),  // КОРРЕКТНОЕ ПРЕОБРАЗОВАНИЕ
+      real_estate_type: formData.real_estate_type || null,
+      ownership_start_date: formData.ownership_start_date,
+      ownership_end_date: formData.ownership_end_date || null
+    };
+
+    console.log('Sending to API:', submitData);
+>>>>>>> Stashed changes
 
     if (object) {
       setFormData({
