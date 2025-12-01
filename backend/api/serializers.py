@@ -131,7 +131,9 @@ class TaxReduceRequestListSerializer(serializers.ModelSerializer):
 
 class TaxableObjectSerializer(serializers.ModelSerializer):
     object_type_name = serializers.CharField(source='object_type.object_type_name', read_only=True)
-    real_estate_type_name = serializers.CharField(source='real_estate_type.real_estate_type_name', read_only=True)
+    object_type_id = serializers.IntegerField(source='object_type.object_type_id', read_only=True)  # ДОБАВЛЕНО
+    real_estate_type_name = serializers.CharField(source='real_estate_type.real_estate_type_name', read_only=True, allow_null=True)
+    real_estate_type_id = serializers.IntegerField(source='real_estate_type.real_estate_type_id', read_only=True, allow_null=True)  # ДОБАВЛЕНО
     ownership_start_date = serializers.DateField(read_only=True)
     ownership_end_date = serializers.DateField(read_only=True)
 
@@ -141,7 +143,7 @@ class TaxableObjectSerializer(serializers.ModelSerializer):
             'object_id', 'object_name', 'cadastral_number', 'object_address',
             'cadastral_value', 'transport_vin', 'registration_plate',
             'transport_model', 'extra_value', 'engine_power',
-            'object_type_name', 'real_estate_type_name',
+            'object_type_name', 'object_type_id', 'real_estate_type_name', 'real_estate_type_id',
             'ownership_start_date', 'ownership_end_date'
         ]
 
@@ -506,29 +508,35 @@ class TaxpayerSearchSerializer(serializers.ModelSerializer):
 
 class DocumentSerializer(serializers.ModelSerializer):
     document_type_name = serializers.CharField(source='document_type.name', read_only=True)
-    
+    document_type_id = serializers.IntegerField(read_only=True, source='document_type.document_type_id') 
     class Meta:
         model = Document
         fields = [
-            'document_id', 'series', 'number', 'issued_by',
+            'document_id', 'document_type_id', 'series', 'number', 'issued_by',
             'issued_date', 'expire_date', 'additional_info',
             'document_type_name'
         ]
 
 class ContactDataSerializer(serializers.ModelSerializer):
-    contact_type_name = serializers.CharField(source='contact_type.name', read_only=True)
+    contact_type_name = serializers.CharField(source='contact_type.name', read_only=True, allow_null=True)
+    contact_type_id = serializers.IntegerField(source='contact_type.type_id', read_only=True)
     
     class Meta:
         model = ContactData
-        fields = ['contact_id', 'value', 'contact_type_name']
+        fields = [
+            'contact_id', 
+            'contact_type_id', 
+            'contact_type_name', 
+            'value'
+        ]
 
 class TaxpayerDetailSerializer(serializers.ModelSerializer):
     region_name = serializers.SerializerMethodField()
     tax_regime_name = serializers.SerializerMethodField()
     payer_type_name = serializers.SerializerMethodField()
     risk_score = serializers.SerializerMethodField()
-    documents = DocumentSerializer(many=True, read_only=True)
-    contacts = ContactDataSerializer(many=True, read_only=True)
+    documents = serializers.SerializerMethodField()
+    contacts = serializers.SerializerMethodField()  # ИЗМЕНЕНО
     inspections = serializers.SerializerMethodField()
     taxable_objects = serializers.SerializerMethodField()
     declarations = serializers.SerializerMethodField()
@@ -542,10 +550,42 @@ class TaxpayerDetailSerializer(serializers.ModelSerializer):
             'birth_date', 'registration_address', 'fact_address',
             'ogrn', 'registration_date', 'bank_detals', 'start_date',
             'end_date', 'executive_list', 'payer_type_id', 'region_key',
-            'tax_regime_id', 'payer_status_id', 'region_name', 'tax_regime_name', 'payer_type_name',  # ДОБАВЛЕНО payer_status_id
+            'tax_regime_id', 'payer_status_id', 'region_name', 'tax_regime_name', 'payer_type_name',
             'risk_score', 'documents', 'contacts', 'inspections',
             'taxable_objects', 'declarations', 'reduce_requests', 'accruals'
         ]
+    
+    # ДОБАВИТЬ ЭТОТ МЕТОД
+    def get_contacts(self, obj):
+        """Получает контакты налогоплательщика"""
+        try:
+            print(f"DEBUG: Getting contacts for taxpayer {obj.taxpayer_id}")
+            # Получаем контакты через обратную связь
+            contacts = ContactData.objects.filter(taxpayer=obj).select_related('contact_type')
+            print(f"DEBUG: Found {contacts.count()} contacts")
+            
+            # Сериализуем контакты
+            return ContactDataSerializer(contacts, many=True).data
+            
+        except Exception as e:
+            print(f"ERROR getting contacts for taxpayer {obj.taxpayer_id}: {str(e)}")
+            return []
+    
+    # ДОБАВИТЬ ЭТОТ МЕТОД
+    def get_documents(self, obj):
+        """Получает документы налогоплательщика"""
+        try:
+            print(f"DEBUG: Getting documents for taxpayer {obj.taxpayer_id}")
+            # Получаем документы через обратную связь
+            documents = Document.objects.filter(taxpayer=obj).select_related('document_type')
+            print(f"DEBUG: Found {documents.count()} documents")
+            
+            # Сериализуем документы
+            return DocumentSerializer(documents, many=True).data
+            
+        except Exception as e:
+            print(f"ERROR getting documents for taxpayer {obj.taxpayer_id}: {str(e)}")
+            return []
     
     def get_region_name(self, obj):
         try:
@@ -846,6 +886,11 @@ class TaxpayerUpdateSerializer(serializers.ModelSerializer):
         return data
 
 class DocumentCreateSerializer(serializers.ModelSerializer):
+    document_type = serializers.PrimaryKeyRelatedField(
+        queryset=DocumentType.objects.all(),
+        required=True
+    )
+    
     class Meta:
         model = Document
         fields = [
@@ -872,12 +917,19 @@ class ContactUpdateSerializer(serializers.ModelSerializer):
         fields = ['contact_type', 'value']
 
 class ObjectCreateSerializer(serializers.ModelSerializer):
+    real_estate_type = serializers.PrimaryKeyRelatedField(
+        queryset=RealEstateType.objects.all(), 
+        required=False, 
+        allow_null=True
+    )
+    
     class Meta:
         model = TaxableObject
         fields = [
             'object_type', 'object_name', 'object_address',
             'cadastral_number', 'cadastral_value', 'transport_vin',
-            'registration_plate', 'engine_power', 'real_estate_type'
+            'registration_plate', 'engine_power', 'real_estate_type',
+            'extra_value', 'transport_model'  # ДОБАВЛЕНО extra_value и transport_model
         ]
 
 class ObjectUpdateSerializer(serializers.ModelSerializer):
@@ -886,7 +938,8 @@ class ObjectUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'object_type', 'object_name', 'object_address',
             'cadastral_number', 'cadastral_value', 'transport_vin',
-            'registration_plate', 'engine_power', 'real_estate_type'
+            'registration_plate', 'engine_power', 'real_estate_type',
+            'extra_value', 'transport_model'  # ДОБАВЛЕНО extra_value и transport_model
         ]
 
 class ObjectOwnershipCreateSerializer(serializers.ModelSerializer):

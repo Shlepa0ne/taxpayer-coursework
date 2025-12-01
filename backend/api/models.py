@@ -26,6 +26,16 @@ class Taxpayer(models.Model):
     payer_type_id = models.IntegerField()
     origin_id = models.IntegerField()
 
+    def __str__(self):
+        if self.inn:
+            return self.inn
+        elif self.fio:
+            return self.fio
+        elif self.full_name:
+            return self.full_name
+        else:
+            return f"Taxpayer {self.taxpayer_id}"
+
     class Meta:
         managed = False
         db_table = 'taxpayer'

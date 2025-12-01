@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { createTaxableObject, updateTaxableObject } from '../../../api/workersApi';
+import { createTaxableObject, updateTaxableObject, getObjectTypes } from '../../../api/workersApi';
 
 // Модальное окно для объектов
 const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   const [formData, setFormData] = useState({
+<<<<<<< HEAD
 <<<<<<< Updated upstream
     object_type_id: '',
 =======
     object_type: '',
 >>>>>>> Stashed changes
+=======
+    object_type: '',  // ИЗМЕНЕНО: было object_type_id
+>>>>>>> fbbcef4ac06cc04019709020e5b9c010820d72e8
     object_name: '',
     object_address: '',
     cadastral_number: '',
@@ -18,11 +22,14 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
     transport_model: '',
     engine_power: '',
     extra_value: '',
+    real_estate_type: null,
     ownership_start_date: '',
     ownership_end_date: ''
   });
   const [objectTypes, setObjectTypes] = useState([]);
+  const [realEstateTypes, setRealEstateTypes] = useState([]);
   const [loading, setLoading] = useState(false);
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 
   useEffect(() => {
@@ -160,20 +167,127 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
     e.preventDefault();
     setLoading(true);
 
+=======
+  const [loadingTypes, setLoadingTypes] = useState(true);  // ДОБАВЛЕНО
+
+  useEffect(() => {
+  const loadData = async () => {
+    setLoadingTypes(true);
+>>>>>>> fbbcef4ac06cc04019709020e5b9c010820d72e8
     try {
+      // Загружаем типы объектов с сервера
+      const types = await getObjectTypes();
+      console.log('Loaded object types:', types);
+      setObjectTypes(types);
+      
+      // Заглушка для типов недвижимости
+      const mockRealEstateTypes = [
+        { real_estate_type_id: 1, real_estate_type_name: 'Квартира' },
+        { real_estate_type_id: 2, real_estate_type_name: 'Дом' },
+        { real_estate_type_id: 3, real_estate_type_name: 'Земельный участок' },
+        { real_estate_type_id: 4, real_estate_type_name: 'Коммерческая недвижимость' }
+      ];
+      setRealEstateTypes(mockRealEstateTypes);
+      
+      // Если редактируем объект, устанавливаем его тип
       if (object) {
-        await updateTaxableObject(object.object_id, formData);
-      } else {
-        await createTaxableObject(taxpayerId, formData);
+        console.log('Editing object data:', object);
+        
+        // ВАЖНО: Проверяем, откуда берется тип объекта
+        // object может содержать object_type_id напрямую или через object_type
+        const objectTypeId = object.object_type_id || 
+                            (object.object_type && object.object_type.object_type_id) ||
+                            '';
+        
+        const realEstateTypeId = object.real_estate_type_id ||
+                                (object.real_estate_type && object.real_estate_type.real_estate_type_id) ||
+                                null;
+        
+        console.log('Object type ID:', objectTypeId);
+        console.log('Real estate type ID:', realEstateTypeId);
+        
+        setFormData({
+          object_type: objectTypeId || '',
+          object_name: object.object_name || '',
+          object_address: object.object_address || '',
+          cadastral_number: object.cadastral_number || '',
+          cadastral_value: object.cadastral_value || '',
+          transport_vin: object.transport_vin || '',
+          registration_plate: object.registration_plate || '',
+          transport_model: object.transport_model || '',
+          engine_power: object.engine_power || '',
+          extra_value: object.extra_value || '',
+          real_estate_type: realEstateTypeId || null,
+          ownership_start_date: object.ownership?.ownership_start_date || '',
+          ownership_end_date: object.ownership?.ownership_end_date || ''
+        });
       }
-      onSave();
     } catch (error) {
-      console.error('Ошибка сохранения объекта:', error);
-      alert('Ошибка при сохранении объекта');
+      console.error('Ошибка загрузки типов объектов:', error);
+      // Запасной вариант
+      const mockObjectTypes = [
+        { object_type_id: 1, object_type_name: 'недвижимость' },
+        { object_type_id: 2, object_type_name: 'транспорт' },
+        { object_type_id: 3, object_type_name: 'прочее имущество' }
+      ];
+      setObjectTypes(mockObjectTypes);
     } finally {
-      setLoading(false);
+      setLoadingTypes(false);
     }
   };
+
+  loadData();
+}, [object]); // ДОБАВЛЕНО object в зависимости
+
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
+
+  try {
+    console.log('Submitting object data:', formData);
+    
+    // Функция для форматирования числовых полей
+    const formatNumberField = (value) => {
+      if (value === '' || value === null || value === undefined) return null;
+      const num = Number(value);
+      return isNaN(num) ? null : num;
+    };
+
+    // Подготавливаем данные для отправки
+    const submitData = {
+      object_type: formData.object_type,
+      object_name: formData.object_name,
+      object_address: formData.object_address || null,
+      cadastral_number: formData.cadastral_number || null,
+      cadastral_value: formatNumberField(formData.cadastral_value),
+      transport_vin: formData.transport_vin || null,
+      registration_plate: formData.registration_plate || null,
+      transport_model: formData.transport_model || null,
+      engine_power: formatNumberField(formData.engine_power),
+      extra_value: formatNumberField(formData.extra_value),  // КОРРЕКТНОЕ ПРЕОБРАЗОВАНИЕ
+      real_estate_type: formData.real_estate_type || null,
+      ownership_start_date: formData.ownership_start_date,
+      ownership_end_date: formData.ownership_end_date || null
+    };
+
+    console.log('Sending to API:', submitData);
+
+    if (object) {
+      await updateTaxableObject(object.object_id, submitData);
+    } else {
+      await createTaxableObject(taxpayerId, submitData);
+    }
+    
+    onSave();
+    
+  } catch (error) {
+    console.error('Ошибка сохранения объекта:', error);
+    console.error('Детали ошибки:', error.response?.data);
+    alert('Ошибка при сохранении объекта: ' + (error.response?.data?.error || error.message));
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -181,39 +295,37 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
 
   // Функция для определения, какие поля показывать в зависимости от типа объекта
   const getVisibleFields = () => {
-    const objectType = objectTypes.find(type => type.object_type_id == formData.object_type_id);
+    const objectTypeId = formData.object_type;
     
-    if (!objectType) return {};
-
-    switch (objectType.object_type_name) {
-      case 'недвижимость':
-        return {
-          showCadastralFields: true,
-          showTransportFields: false,
-          showExtraValue: false
-        };
-      case 'транспорт':
-        return {
-          showCadastralFields: false,
-          showTransportFields: true,
-          showExtraValue: false
-        };
-      case 'прочее имущество':
-        return {
-          showCadastralFields: false,
-          showTransportFields: false,
-          showExtraValue: true
-        };
-      default:
-        return {
-          showCadastralFields: false,
-          showTransportFields: false,
-          showExtraValue: false
-        };
+    // Используем ID для проверки, так как они стабильны
+    if (objectTypeId == 1) {  // транспорт
+      return {
+        showCadastralFields: false,
+        showTransportFields: true,
+        showExtraValue: false,
+        showRealEstateType: false,
+        showObjectAddress: false
+      };
+    } else if (objectTypeId == 2) {  // недвижимость
+      return {
+        showCadastralFields: true,
+        showTransportFields: false,
+        showExtraValue: false,
+        showRealEstateType: true,
+        showObjectAddress: true
+      };
+    } else {  // всё остальное (3 - земельный участок, и любые будущие типы)
+      return {
+        showCadastralFields: false,
+        showTransportFields: false,
+        showExtraValue: true,
+        showRealEstateType: false,
+        showObjectAddress: false
+      };
     }
   };
 
-  const { showCadastralFields, showTransportFields, showExtraValue } = getVisibleFields();
+  const { showCadastralFields, showTransportFields, showExtraValue, showRealEstateType, showObjectAddress } = getVisibleFields();
 
   return (
     <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -233,17 +345,23 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
                     <label className="form-label">Тип объекта *</label>
                     <select
                       className="form-select"
-                      value={formData.object_type_id}
-                      onChange={(e) => handleChange('object_type_id', e.target.value)}
+                      value={formData.object_type}
+                      onChange={(e) => handleChange('object_type', e.target.value)}
                       required
+                      disabled={loadingTypes}
                     >
-                      <option value="">Выберите тип объекта</option>
-                      {objectTypes.map(type => (
-                        <option key={type.object_type_id} value={type.object_type_id}>
-                          {type.object_type_name}
+                      <option value="">
+                        {loadingTypes ? 'Загрузка типов...' : 'Выберите тип объекта'}
+                      </option>
+                      {!loadingTypes && objectTypes.map(type => (
+                        <option key={type.object_type_id || type.id} value={type.object_type_id || type.id}>
+                          {type.object_type_name || type.name}
                         </option>
                       ))}
                     </select>
+                    {loadingTypes && (
+                      <div className="form-text">Загрузка доступных типов объектов...</div>
+                    )}
                   </div>
                 </div>
                 <div className="col-md-6">
@@ -261,20 +379,47 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
                 </div>
               </div>
 
+              {/* Поле адреса объекта (показывается для всех, кроме прочего имущества) */}
+              {showObjectAddress && (
+                <div className="mb-3">
+                  <label className="form-label">Адрес объекта</label>
+                  <textarea
+                    className="form-control"
+                    rows="2"
+                    value={formData.object_address}
+                    onChange={(e) => handleChange('object_address', e.target.value)}
+                    placeholder="Введите адрес объекта"
+                    disabled={formData.object_type == 3} // Для прочего имущества disabled
+                  />
+                  {formData.object_type == 3 && (
+                    <div className="form-text text-muted">Для прочего имущества адрес не указывается</div>
+                  )}
+                </div>
+              )}
+
+              {/* Тип недвижимости (показывается только для недвижимости) */}
+              {showRealEstateType && (
+                <div className="mb-3">
+                  <label className="form-label">Тип недвижимости</label>
+                  <select
+                    className="form-select"
+                    value={formData.real_estate_type || ''}
+                    onChange={(e) => handleChange('real_estate_type', e.target.value)}
+                  >
+                    <option value="">Выберите тип недвижимости</option>
+                    {realEstateTypes.map(type => (
+                      <option key={type.real_estate_type_id} value={type.real_estate_type_id}>
+                        {type.real_estate_type_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Поля для недвижимости */}
               {showCadastralFields && (
                 <div className="border rounded p-3 mb-3 bg-light">
                   <h6 className="text-muted mb-3">Данные недвижимости</h6>
-                  <div className="mb-3">
-                    <label className="form-label">Адрес объекта</label>
-                    <textarea
-                      className="form-control"
-                      rows="2"
-                      value={formData.object_address}
-                      onChange={(e) => handleChange('object_address', e.target.value)}
-                      placeholder="Введите адрес объекта"
-                    />
-                  </div>
                   <div className="row">
                     <div className="col-md-6">
                       <div className="mb-3">
@@ -297,6 +442,7 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
                           value={formData.cadastral_value}
                           onChange={(e) => handleChange('cadastral_value', e.target.value)}
                           step="0.01"
+                          min="0"
                           placeholder="0.00"
                         />
                       </div>
@@ -357,6 +503,8 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
                           value={formData.engine_power}
                           onChange={(e) => handleChange('engine_power', e.target.value)}
                           placeholder="150"
+                          min="0"
+                          step="1"
                         />
                       </div>
                     </div>
@@ -369,14 +517,16 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
                 <div className="border rounded p-3 mb-3 bg-light">
                   <h6 className="text-muted mb-3">Оценочная стоимость</h6>
                   <div className="mb-3">
-                    <label className="form-label">Оценочная стоимость</label>
+                    <label className="form-label">Оценочная стоимость *</label>
                     <input
                       type="number"
                       className="form-control"
                       value={formData.extra_value}
                       onChange={(e) => handleChange('extra_value', e.target.value)}
                       step="0.01"
+                      min="0"
                       placeholder="0.00"
+                      required
                     />
                     <div className="form-text">
                       Укажите оценочную стоимость имущества
