@@ -4,9 +4,7 @@ import { createTaxableObject, updateTaxableObject, getObjectTypes } from '../../
 // Модальное окно для объектов
 const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   const [formData, setFormData] = useState({
-    object_type_id: '',
     object_type: '',
-    object_type: '',  // ИЗМЕНЕНО: было object_type_id
     object_name: '',
     object_address: '',
     cadastral_number: '',
@@ -20,18 +18,10 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
     ownership_start_date: '',
     ownership_end_date: ''
   });
+  
   const [objectTypes, setObjectTypes] = useState([]);
   const [realEstateTypes, setRealEstateTypes] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    // Заглушка для типов объектов
-    const mockObjectTypes = [
-      { object_type_id: 1, object_type_name: 'недвижимость' },
-      { object_type_id: 2, object_type_name: 'транспорт' },
-      { object_type_id: 3, object_type_name: 'прочее имущество' }
-    ];
-    setObjectTypes(mockObjectTypes);
   const [loadingTypes, setLoadingTypes] = useState(true);
 
   useEffect(() => {
@@ -89,9 +79,9 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
         console.error('Ошибка загрузки типов объектов:', error);
         // Запасной вариант
         const mockObjectTypes = [
-          { object_type_id: 1, object_type_name: 'недвижимость' },
-          { object_type_id: 2, object_type_name: 'транспорт' },
-          { object_type_id: 3, object_type_name: 'прочее имущество' }
+          { object_type_id: 1, object_type_name: 'транспорт' },
+          { object_type_id: 2, object_type_name: 'недвижимость' },
+          { object_type_id: 3, object_type_name: 'земельный участок' }
         ];
         setObjectTypes(mockObjectTypes);
       } finally {
@@ -100,182 +90,57 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
     };
 
     loadData();
-  }, [object]);
-
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-
-  try {
-    console.log('Submitting object data:', formData);
-    
-    // Функция для форматирования числовых полей
-    const formatNumberField = (value) => {
-      if (value === '' || value === null || value === undefined) return null;
-      const num = Number(value);
-      return isNaN(num) ? null : num;
-    };
-
-    // Подготавливаем данные для отправки
-    const submitData = {
-      object_type: formData.object_type,
-      object_name: formData.object_name,
-      object_address: formData.object_address || null,
-      cadastral_number: formData.cadastral_number || null,
-      cadastral_value: formatNumberField(formData.cadastral_value),
-      transport_vin: formData.transport_vin || null,
-      registration_plate: formData.registration_plate || null,
-      transport_model: formData.transport_model || null,
-      engine_power: formatNumberField(formData.engine_power),
-      extra_value: formatNumberField(formData.extra_value),  // КОРРЕКТНОЕ ПРЕОБРАЗОВАНИЕ
-      real_estate_type: formData.real_estate_type || null,
-      ownership_start_date: formData.ownership_start_date,
-      ownership_end_date: formData.ownership_end_date || null
-    };
-
-    console.log('Sending to API:', submitData);
-
-    if (object) {
-      setFormData({
-        object_type_id: object.object_type_id || '',
-        object_name: object.object_name || '',
-        object_address: object.object_address || '',
-        cadastral_number: object.cadastral_number || '',
-        cadastral_value: object.cadastral_value || '',
-        transport_vin: object.transport_vin || '',
-        registration_plate: object.registration_plate || '',
-        transport_model: object.transport_model || '',
-        engine_power: object.engine_power || '',
-        extra_value: object.extra_value || '',
-        ownership_start_date: object.ownership?.ownership_start_date || '',
-        ownership_end_date: object.ownership?.ownership_end_date || ''
-      });
-    }
   }, [object]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-  const [loadingTypes, setLoadingTypes] = useState(true);  // ДОБАВЛЕНО
-
-  useEffect(() => {
-  const loadData = async () => {
-    setLoadingTypes(true);
     try {
-      // Загружаем типы объектов с сервера
-      const types = await getObjectTypes();
-      console.log('Loaded object types:', types);
-      setObjectTypes(types);
+      console.log('Submitting object data:', formData);
       
-      // Заглушка для типов недвижимости
-      const mockRealEstateTypes = [
-        { real_estate_type_id: 1, real_estate_type_name: 'Квартира' },
-        { real_estate_type_id: 2, real_estate_type_name: 'Дом' },
-        { real_estate_type_id: 3, real_estate_type_name: 'Земельный участок' },
-        { real_estate_type_id: 4, real_estate_type_name: 'Коммерческая недвижимость' }
-      ];
-      setRealEstateTypes(mockRealEstateTypes);
-      
-      // Если редактируем объект, устанавливаем его тип
+      // Функция для форматирования числовых полей
+      const formatNumberField = (value) => {
+        if (value === '' || value === null || value === undefined) return null;
+        const num = Number(value);
+        return isNaN(num) ? null : num;
+      };
+
+      // Подготавливаем данные для отправки
+      const submitData = {
+        object_type: formData.object_type,
+        object_name: formData.object_name,
+        object_address: formData.object_address || null,
+        cadastral_number: formData.cadastral_number || null,
+        cadastral_value: formatNumberField(formData.cadastral_value),
+        transport_vin: formData.transport_vin || null,
+        registration_plate: formData.registration_plate || null,
+        transport_model: formData.transport_model || null,
+        engine_power: formatNumberField(formData.engine_power),
+        extra_value: formatNumberField(formData.extra_value),
+        real_estate_type: formData.real_estate_type || null,
+        ownership_start_date: formData.ownership_start_date,
+        ownership_end_date: formData.ownership_end_date || null
+      };
+
+      console.log('Sending to API:', submitData);
+
       if (object) {
-        console.log('Editing object data:', object);
-        
-        // ВАЖНО: Проверяем, откуда берется тип объекта
-        // object может содержать object_type_id напрямую или через object_type
-        const objectTypeId = object.object_type_id || 
-                            (object.object_type && object.object_type.object_type_id) ||
-                            '';
-        
-        const realEstateTypeId = object.real_estate_type_id ||
-                                (object.real_estate_type && object.real_estate_type.real_estate_type_id) ||
-                                null;
-        
-        console.log('Object type ID:', objectTypeId);
-        console.log('Real estate type ID:', realEstateTypeId);
-        
-        setFormData({
-          object_type: objectTypeId || '',
-          object_name: object.object_name || '',
-          object_address: object.object_address || '',
-          cadastral_number: object.cadastral_number || '',
-          cadastral_value: object.cadastral_value || '',
-          transport_vin: object.transport_vin || '',
-          registration_plate: object.registration_plate || '',
-          transport_model: object.transport_model || '',
-          engine_power: object.engine_power || '',
-          extra_value: object.extra_value || '',
-          real_estate_type: realEstateTypeId || null,
-          ownership_start_date: object.ownership?.ownership_start_date || '',
-          ownership_end_date: object.ownership?.ownership_end_date || ''
-        });
+        await updateTaxableObject(object.object_id, submitData);
+      } else {
+        await createTaxableObject(taxpayerId, submitData);
       }
-      } catch (error) {
-        console.error('Ошибка загрузки типов объектов:', error);
-        // Запасной вариант
-        const mockObjectTypes = [
-          { object_type_id: 1, object_type_name: 'недвижимость' },
-          { object_type_id: 2, object_type_name: 'транспорт' },
-          { object_type_id: 3, object_type_name: 'прочее имущество' }
-        ];
-        setObjectTypes(mockObjectTypes);
-      } finally {
-        setLoadingTypes(false);
-      }
-    };
-
-    loadData();
-  }, [object]); 
-
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-
-  try {
-    console.log('Submitting object data:', formData);
-    
-    // Функция для форматирования числовых полей
-    const formatNumberField = (value) => {
-      if (value === '' || value === null || value === undefined) return null;
-      const num = Number(value);
-      return isNaN(num) ? null : num;
-    };
-
-    // Подготавливаем данные для отправки
-    const submitData = {
-      object_type: formData.object_type,
-      object_name: formData.object_name,
-      object_address: formData.object_address || null,
-      cadastral_number: formData.cadastral_number || null,
-      cadastral_value: formatNumberField(formData.cadastral_value),
-      transport_vin: formData.transport_vin || null,
-      registration_plate: formData.registration_plate || null,
-      transport_model: formData.transport_model || null,
-      engine_power: formatNumberField(formData.engine_power),
-      extra_value: formatNumberField(formData.extra_value),  // КОРРЕКТНОЕ ПРЕОБРАЗОВАНИЕ
-      real_estate_type: formData.real_estate_type || null,
-      ownership_start_date: formData.ownership_start_date,
-      ownership_end_date: formData.ownership_end_date || null
-    };
-
-    console.log('Sending to API:', submitData);
-
-    if (object) {
-      await updateTaxableObject(object.object_id, submitData);
-    } else {
-      await createTaxableObject(taxpayerId, submitData);
+      
+      onSave();
+      
+    } catch (error) {
+      console.error('Ошибка сохранения объекта:', error);
+      console.error('Детали ошибки:', error.response?.data);
+      alert('Ошибка при сохранении объекта: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setLoading(false);
     }
-    
-    onSave();
-    
-  } catch (error) {
-    console.error('Ошибка сохранения объекта:', error);
-    console.error('Детали ошибки:', error.response?.data);
-    alert('Ошибка при сохранении объекта: ' + (error.response?.data?.error || error.message));
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -283,10 +148,9 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
 
   // Функция для определения, какие поля показывать в зависимости от типа объекта
   const getVisibleFields = () => {
-    const objectTypeId = formData.object_type;
+    const objectTypeId = parseInt(formData.object_type);
     
-    // Используем ID для проверки, так как они стабильны
-    if (objectTypeId == 1) {  // транспорт
+    if (objectTypeId === 1) {  // транспорт
       return {
         showCadastralFields: false,
         showTransportFields: true,
@@ -294,19 +158,19 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
         showRealEstateType: false,
         showObjectAddress: false
       };
-    } else if (objectTypeId == 2) {  // недвижимость
+    } else if (objectTypeId === 2) {  // недвижимость
       return {
-        showCadastralFields: true,
-        showTransportFields: false,
+        showCadastralFields: true, 
+        showTransportFields: false, 
         showExtraValue: false,
-        showRealEstateType: true,
-        showObjectAddress: true
+        showRealEstateType: true,  
+        showObjectAddress: true   
       };
-    } else {  // всё остальное (3 - земельный участок, и любые будущие типы)
+    } else {  // прочее имущество (если появятся новые типы)
       return {
         showCadastralFields: false,
         showTransportFields: false,
-        showExtraValue: true,
+        showExtraValue: true,       // для прочего имущества показываем поле оценки
         showRealEstateType: false,
         showObjectAddress: false
       };
@@ -377,11 +241,7 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
                     value={formData.object_address}
                     onChange={(e) => handleChange('object_address', e.target.value)}
                     placeholder="Введите адрес объекта"
-                    disabled={formData.object_type == 3} // Для прочего имущества disabled
                   />
-                  {formData.object_type == 3 && (
-                    <div className="form-text text-muted">Для прочего имущества адрес не указывается</div>
-                  )}
                 </div>
               )}
 
