@@ -506,11 +506,11 @@ class TaxpayerSearchSerializer(serializers.ModelSerializer):
 
 class DocumentSerializer(serializers.ModelSerializer):
     document_type_name = serializers.CharField(source='document_type.name', read_only=True)
-    
+    document_type_id = serializers.IntegerField(read_only=True, source='document_type.document_type_id') 
     class Meta:
         model = Document
         fields = [
-            'document_id', 'series', 'number', 'issued_by',
+            'document_id', 'document_type_id', 'series', 'number', 'issued_by',
             'issued_date', 'expire_date', 'additional_info',
             'document_type_name'
         ]
@@ -527,7 +527,7 @@ class TaxpayerDetailSerializer(serializers.ModelSerializer):
     tax_regime_name = serializers.SerializerMethodField()
     payer_type_name = serializers.SerializerMethodField()
     risk_score = serializers.SerializerMethodField()
-    documents = DocumentSerializer(many=True, read_only=True)
+    documents = serializers.SerializerMethodField()  # ИЗМЕНЕНО
     contacts = ContactDataSerializer(many=True, read_only=True)
     inspections = serializers.SerializerMethodField()
     taxable_objects = serializers.SerializerMethodField()
@@ -542,10 +542,26 @@ class TaxpayerDetailSerializer(serializers.ModelSerializer):
             'birth_date', 'registration_address', 'fact_address',
             'ogrn', 'registration_date', 'bank_detals', 'start_date',
             'end_date', 'executive_list', 'payer_type_id', 'region_key',
-            'tax_regime_id', 'payer_status_id', 'region_name', 'tax_regime_name', 'payer_type_name',  # ДОБАВЛЕНО payer_status_id
+            'tax_regime_id', 'payer_status_id', 'region_name', 'tax_regime_name', 'payer_type_name',
             'risk_score', 'documents', 'contacts', 'inspections',
             'taxable_objects', 'declarations', 'reduce_requests', 'accruals'
         ]
+    
+    # ДОБАВИТЬ ЭТОТ МЕТОД
+    def get_documents(self, obj):
+        """Получает документы налогоплательщика"""
+        try:
+            print(f"DEBUG: Getting documents for taxpayer {obj.taxpayer_id}")
+            # Получаем документы через обратную связь
+            documents = Document.objects.filter(taxpayer=obj).select_related('document_type')
+            print(f"DEBUG: Found {documents.count()} documents")
+            
+            # Сериализуем документы
+            return DocumentSerializer(documents, many=True).data
+            
+        except Exception as e:
+            print(f"ERROR getting documents for taxpayer {obj.taxpayer_id}: {str(e)}")
+            return []
     
     def get_region_name(self, obj):
         try:
@@ -846,6 +862,11 @@ class TaxpayerUpdateSerializer(serializers.ModelSerializer):
         return data
 
 class DocumentCreateSerializer(serializers.ModelSerializer):
+    document_type = serializers.PrimaryKeyRelatedField(
+        queryset=DocumentType.objects.all(),
+        required=True
+    )
+    
     class Meta:
         model = Document
         fields = [

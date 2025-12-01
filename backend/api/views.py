@@ -1205,16 +1205,41 @@ class CreateDocumentAPIView(APIView):
 
     def post(self, request, taxpayer_id):
         try:
+            print(f"DEBUG: Creating document for taxpayer {taxpayer_id}")
+            print(f"DEBUG: Request data: {request.data}")
+            
             taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
-            serializer = DocumentCreateSerializer(data=request.data)
+            
+            # КОРРЕКТНОЕ ОБРАБОТКА document_type
+            data = request.data.copy()
+            if 'document_type' in data:
+                # document_type уже должен содержать ID
+                pass
+            elif 'document_type_id' in data:
+                data['document_type'] = data['document_type_id']
+            
+            print(f"DEBUG: Processed data: {data}")
+            
+            serializer = DocumentCreateSerializer(data=data)
             
             if serializer.is_valid():
+                print(f"DEBUG: Serializer is valid")
                 document = serializer.save(taxpayer=taxpayer)
+                print(f"DEBUG: Document created with ID: {document.document_id}")
                 return Response(DocumentSerializer(document).data, status=status.HTTP_201_CREATED)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
+            else:
+                print(f"DEBUG: Serializer errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
         except Taxpayer.DoesNotExist:
+            print(f"DEBUG: Taxpayer {taxpayer_id} not found")
             return Response({'error': 'Налогоплательщик не найден'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(f"DEBUG: Exception: {str(e)}")
+            import traceback
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
+            return Response({'error': f'Ошибка при создании документа: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
 class DocumentDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]

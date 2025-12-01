@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { deleteDocument } from '../../../api/workersApi';
 import DocumentModal from './DocumentModal';
 import { formatDate } from '../../../utils/formatters';
@@ -6,6 +6,16 @@ import { formatDate } from '../../../utils/formatters';
 const DocumentsSection = ({ documents, taxpayerId, canEdit, onUpdate }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingDocument, setEditingDocument] = useState(null);
+
+  // ДОБАВИТЬ ОТЛАДОЧНУЮ ИНФОРМАЦИЮ
+  useEffect(() => {
+    console.log('DocumentsSection received documents:', documents);
+    if (documents && documents.length > 0) {
+      console.log('First document:', documents[0]);
+      console.log('Document type name:', documents[0].document_type_name);
+      console.log('Document type id:', documents[0].document_type_id);
+    }
+  }, [documents]);
 
   const handleDeleteDocument = async (documentId) => {
     if (window.confirm('Вы уверены, что хотите удалить этот документ?')) {

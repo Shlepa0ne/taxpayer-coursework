@@ -17,13 +17,24 @@ const DocumentModal = ({ document, taxpayerId, onClose, onSave }) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Заглушка для типов документов - в реальном приложении нужно загрузить с API
-    const mockDocumentTypes = [
-      { document_type_id: 1, name: 'Паспорт' },
-      { document_type_id: 2, name: 'Водительское удостоверение' },
-      { document_type_id: 3, name: 'Свидетельство о регистрации' }
-    ];
-    setDocumentTypes(mockDocumentTypes);
+    // Заменяем заглушку на реальный вызов API
+    const loadDocumentTypes = async () => {
+      try {
+        const types = await getDocumentTypes();
+        setDocumentTypes(types);
+      } catch (error) {
+        console.error('Ошибка загрузки типов документов:', error);
+        // Запасной вариант
+        const mockDocumentTypes = [
+          { document_type_id: 1, name: 'Паспорт' },
+          { document_type_id: 2, name: 'Водительское удостоверение' },
+          { document_type_id: 3, name: 'Свидетельство о регистрации' }
+        ];
+        setDocumentTypes(mockDocumentTypes);
+      }
+    };
+
+    loadDocumentTypes();
 
     if (document) {
       setFormData({
@@ -43,15 +54,27 @@ const DocumentModal = ({ document, taxpayerId, onClose, onSave }) => {
     setLoading(true);
 
     try {
+      // Подготавливаем данные для отправки
+      const submitData = {
+        ...formData,
+        document_type: formData.document_type_id // переименовываем поле
+      };
+      
+      // Удаляем старое поле, если оно есть
+      delete submitData.document_type_id;
+
+      console.log('Отправка данных документа:', submitData);
+      
       if (document) {
-        await updateDocument(document.document_id, formData);
+        await updateDocument(document.document_id, submitData);
       } else {
-        await createDocument(taxpayerId, formData);
+        await createDocument(taxpayerId, submitData);
       }
       onSave();
     } catch (error) {
       console.error('Ошибка сохранения документа:', error);
-      alert('Ошибка при сохранении документа');
+      console.error('Детали ошибки:', error.response?.data);
+      alert('Ошибка при сохранении документа: ' + (error.response?.data?.error || error.message));
     } finally {
       setLoading(false);
     }
