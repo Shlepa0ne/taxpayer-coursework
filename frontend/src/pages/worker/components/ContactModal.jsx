@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { createContact, updateContact } from '../../../api/workersApi';
+import { createContact, updateContact, getContactTypes } from '../../../api/workersApi'; // ДОБАВИТЬ getContactTypes
 
-// Модальное окно для контактов
 const ContactModal = ({ contact, taxpayerId, onClose, onSave }) => {
   const [formData, setFormData] = useState({
-    contact_type_id: '',
+    contact_type: '',  // ИЗМЕНЕНО: было contact_type_id
     value: ''
   });
   const [contactTypes, setContactTypes] = useState([]);
@@ -12,16 +11,29 @@ const ContactModal = ({ contact, taxpayerId, onClose, onSave }) => {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    // Заглушка для типов контактов
-    const mockContactTypes = [
-      { contact_type_id: 1, name: 'Телефон' },
-      { contact_type_id: 2, name: 'Email' }
-    ];
-    setContactTypes(mockContactTypes);
+    const loadContactTypes = async () => {
+      try {
+        // Пробуем загрузить типы контактов с сервера
+        const types = await getContactTypes();
+        console.log('Loaded contact types:', types);
+        setContactTypes(types);
+      } catch (error) {
+        console.error('Ошибка загрузки типов контактов:', error);
+        // Запасной вариант
+        const mockContactTypes = [
+          { type_id: 1, name: 'Телефон' },
+          { type_id: 2, name: 'Email' }
+        ];
+        setContactTypes(mockContactTypes);
+      }
+    };
+
+    loadContactTypes();
 
     if (contact) {
+      console.log('Editing contact:', contact);
       setFormData({
-        contact_type_id: contact.contact_type_id || '',
+        contact_type: contact.contact_type_id || contact.contact_type || '',  // ИЗМЕНЕНО
         value: contact.value || ''
       });
     }
@@ -31,23 +43,28 @@ const ContactModal = ({ contact, taxpayerId, onClose, onSave }) => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.contact_type_id) {
-      newErrors.contact_type_id = 'Выберите тип контакта';
+    if (!formData.contact_type) {
+      newErrors.contact_type = 'Выберите тип контакта';
     }
 
     if (!formData.value) {
       newErrors.value = 'Введите значение';
     } else {
-      const contactType = contactTypes.find(type => type.contact_type_id == formData.contact_type_id);
+      const contactType = contactTypes.find(type => 
+        type.type_id == formData.contact_type || type.contact_type_id == formData.contact_type
+      );
       
       if (contactType) {
-        if (contactType.name === 'Телефон') {
-          // Валидация телефона: только цифры, минимум 10 символов
-          const phoneRegex = /^[0-9+-\s()]{10,15}$/;
-          if (!phoneRegex.test(formData.value.replace(/\s/g, ''))) {
-            newErrors.value = 'Введите корректный номер телефона';
+        const typeName = contactType.name || contactType.contact_type_name;
+        
+        if (typeName === 'Телефон' || typeName === 'телефон' || typeName === 'Phone' || typeName === 'phone') {
+          // Более гибкая валидация телефона
+          const phoneRegex = /^[0-9+-\s()]{10,20}$/;
+          const cleanPhone = formData.value.replace(/\s/g, '');
+          if (!phoneRegex.test(cleanPhone)) {
+            newErrors.value = 'Введите корректный номер телефона (минимум 10 цифр)';
           }
-        } else if (contactType.name === 'Email') {
+        } else if (typeName === 'Email' || typeName === 'email') {
           // Валидация email
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (!emailRegex.test(formData.value)) {
@@ -71,15 +88,28 @@ const ContactModal = ({ contact, taxpayerId, onClose, onSave }) => {
     setLoading(true);
 
     try {
+      console.log('Submitting contact data:', formData);
+      
+      // Подготавливаем данные для отправки
+      const submitData = {
+        contact_type: formData.contact_type,
+        value: formData.value
+      };
+      
+      console.log('Sending to API:', submitData);
+      
       if (contact) {
-        await updateContact(contact.contact_id, formData);
+        await updateContact(contact.contact_id, submitData);
       } else {
-        await createContact(taxpayerId, formData);
+        await createContact(taxpayerId, submitData);
       }
+      
       onSave();
+      
     } catch (error) {
       console.error('Ошибка сохранения контакта:', error);
-      alert('Ошибка при сохранении контакта');
+      console.error('Детали ошибки:', error.response?.data);
+      alert('Ошибка при сохранении контакта: ' + (error.response?.data?.error || error.message));
     } finally {
       setLoading(false);
     }
@@ -94,11 +124,14 @@ const ContactModal = ({ contact, taxpayerId, onClose, onSave }) => {
   };
 
   const getPlaceholder = () => {
-    const contactType = contactTypes.find(type => type.contact_type_id == formData.contact_type_id);
+    const contactType = contactTypes.find(type => 
+      type.type_id == formData.contact_type || type.contact_type_id == formData.contact_type
+    );
     if (contactType) {
-      if (contactType.name === 'Телефон') {
+      const typeName = contactType.name || contactType.contact_type_name;
+      if (typeName === 'Телефон' || typeName === 'телефон' || typeName === 'Phone'  || typeName === 'phone') {
         return '+7 (999) 123-45-67';
-      } else if (contactType.name === 'Email') {
+      } else if (typeName === 'Email' || typeName === 'email') {
         return 'example@mail.ru';
       }
     }
@@ -120,27 +153,42 @@ const ContactModal = ({ contact, taxpayerId, onClose, onSave }) => {
               <div className="mb-3">
                 <label className="form-label">Тип контакта *</label>
                 <select
-                  className={`form-select ${errors.contact_type_id ? 'is-invalid' : ''}`}
-                  value={formData.contact_type_id}
-                  onChange={(e) => handleChange('contact_type_id', e.target.value)}
+                  className={`form-select ${errors.contact_type ? 'is-invalid' : ''}`}
+                  value={formData.contact_type}
+                  onChange={(e) => handleChange('contact_type', e.target.value)}
                   required
                 >
                   <option value="">Выберите тип контакта</option>
                   {contactTypes.map(type => (
-                    <option key={type.contact_type_id} value={type.contact_type_id}>
-                      {type.name}
+                    <option 
+                      key={type.type_id || type.contact_type_id} 
+                      value={type.type_id || type.contact_type_id}
+                    >
+                      {type.name || type.contact_type_name}
                     </option>
                   ))}
                 </select>
-                {errors.contact_type_id && (
-                  <div className="invalid-feedback">{errors.contact_type_id}</div>
+                {errors.contact_type && (
+                  <div className="invalid-feedback">{errors.contact_type}</div>
                 )}
               </div>
 
               <div className="mb-3">
                 <label className="form-label">
-                  {formData.contact_type_id == 1 ? 'Номер телефона *' : 
-                   formData.contact_type_id == 2 ? 'Email адрес *' : 'Значение *'}
+                  {(() => {
+                    const contactType = contactTypes.find(type => 
+                      type.type_id == formData.contact_type || type.contact_type_id == formData.contact_type
+                    );
+                    if (contactType) {
+                      const typeName = contactType.name || contactType.contact_type_name;
+                      if (typeName === 'Телефон' || typeName === 'телефон' || typeName === 'Phone' || typeName === 'phone') {
+                        return 'Номер телефона *';
+                      } else if (typeName === 'Email' || typeName === 'email') {
+                        return 'Email адрес *';
+                      }
+                    }
+                    return 'Значение *';
+                  })()}
                 </label>
                 <input
                   type="text"
@@ -153,12 +201,20 @@ const ContactModal = ({ contact, taxpayerId, onClose, onSave }) => {
                 {errors.value && (
                   <div className="invalid-feedback">{errors.value}</div>
                 )}
-                {formData.contact_type_id == 1 && (
-                  <div className="form-text">Формат: +7 (999) 123-45-67 или 89991234567</div>
-                )}
-                {formData.contact_type_id == 2 && (
-                  <div className="form-text">Формат: example@mail.ru</div>
-                )}
+                {(() => {
+                  const contactType = contactTypes.find(type => 
+                    type.type_id == formData.contact_type || type.contact_type_id == formData.contact_type
+                  );
+                  if (contactType) {
+                    const typeName = contactType.name || contactType.contact_type_name;
+                    if (typeName === 'Телефон' || typeName === 'телефон' || typeName === 'Phone' || typeName === 'phone') {
+                      return <div className="form-text">Формат: +7 (999) 123-45-67 или 89991234567</div>;
+                    } else if (typeName === 'Email' || typeName === 'email') {
+                      return <div className="form-text">Формат: example@mail.ru</div>;
+                    }
+                  }
+                  return null;
+                })()}
               </div>
             </div>
             <div className="modal-footer">
