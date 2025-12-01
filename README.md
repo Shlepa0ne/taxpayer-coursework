@@ -24,7 +24,13 @@ cd <название-папки-проекта>
 ### 2. Настройка базы данных PostgreSQL
 Перед запуском приложения необходимо развернуть базу данных:
 1.  Создайте пользователя и базу данных в PostgreSQL.
-2.  Выполните SQL-скрипты из папки `/database` в следующем порядке: `01_schema.sql`, `02_functions.sql`, `03_initial_data.sql`.
+2.  Выполните SQL-скрипты из папки `/database` в следующем порядке: `01_schema.sql`, `02_functions.sql`, `03_initial_data.sql`, `04-authentication.sql`.
+
+**ВАЖНО:** Пароль для входа пользователей генерируется в Django (функция make_password(...)). Пример добавления пользователя:
+```bash
+INSERT INTO public.taxpayer_auth(inn, password_hash) VALUES
+('1234567890', 'pbkdf2_sha256$1000000$AXGVtHDiai2yKTXfS7gsSq$btIFq8uIdrrZWDIvoXxYN4eDzt2T7T0lsqGK3PLgOQ8=');
+```
 
 ### 3. Настройка Backend
 Все команды выполняются из директории `/backend`.

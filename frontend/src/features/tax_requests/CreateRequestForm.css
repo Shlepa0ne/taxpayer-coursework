@@ -1,0 +1,85 @@
+/* Дополнительные кастомные стили для формы */
+.tax-request-form {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.form-label {
+  color: #495057;
+  font-weight: 600;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #198754 0%, #157347 100%);
+  border: none;
+  font-weight: 600;
+}
+
+.btn-success:hover {
+  background: linear-gradient(135deg, #157347 0%, #0f5132 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(25, 135, 84, 0.3);
+}
+
+.card {
+  transition: transform 0.2s ease-in-out;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+/* Стили для круговых иконок */
+.circle-icon {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.circle-icon-lg {
+  width: 120px;
+  height: 120px;
+}
+
+.circle-icon-sm {
+  width: 80px;
+  height: 80px;
+}
+
+/* Анимация для статусов */
+.status-badge {
+  transition: all 0.3s ease;
+}
+
+.status-badge:hover {
+  transform: scale(1.05);
+}
+
+/* Стили для таблицы заявлений */
+.requests-table tr {
+  transition: background-color 0.2s ease;
+}
+
+.requests-table tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+  .circle-icon {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .requests-table {
+    font-size: 0.875rem;
+  }
+}

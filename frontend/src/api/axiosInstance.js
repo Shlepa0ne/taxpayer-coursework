@@ -26,7 +26,10 @@ axiosInstance.interceptors.response.use(
     const url = originalRequest.url;
 
     // Исключаем эндпоинты аутентификации из логики обновления токена
-    const isAuthEndpoint = url.includes('/auth/token/') || url.includes('/auth/logout/');
+    const isAuthEndpoint =
+        url.includes('/auth/login') ||
+        url.includes('/auth/token') ||
+        url.includes('/auth/logout');
 
     if (error.response.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;

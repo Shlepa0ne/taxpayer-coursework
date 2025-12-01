@@ -66,3 +66,53 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+
+/* Добавить в основной CSS файл */
+.step-indicator {
+  display: flex;
+  align-items: center;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.step-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #e9ecef;
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.step.active .step-circle {
+  background-color: #0d6efd;
+  color: white;
+}
+
+.step-label {
+  font-size: 0.875rem;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.step.active .step-label {
+  color: #0d6efd;
+}
+
+.step-connector {
+  width: 100px;
+  height: 2px;
+  background-color: #e9ecef;
+  margin: 0 1rem;
+  margin-top: -20px;
+}

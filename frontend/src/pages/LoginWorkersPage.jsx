@@ -1,0 +1,83 @@
+// frontend/src/pages/LoginWorkersPage.jsx
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { loginWorker } from '../api/authApi';
+import { useAuth } from '../context/AuthContext'; // Добавляем импорт
+
+const LoginWorkersPage = () => {
+  const [inn, setInn] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+  const { login } = useAuth(); // Получаем функцию login из контекста
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      const data = await loginWorker({ inn, password });
+      
+      // Вызываем login в контексте для немедленного обновления состояния
+      login({
+        access: data.access,
+        refresh: data.refresh,
+        role: data.role
+      });
+      
+      // После успешного входа — перенаправим на страницу сотрудников
+      navigate('/worker');
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Ошибка входа');
+    }
+  };
+
+  return (
+    <div className="container d-flex align-items-center justify-content-center" style={{ minHeight: '80vh' }}>
+      <div className="card shadow-sm" style={{ width: '420px' }}>
+        <div className="card-body p-4">
+          <h3 className="card-title mb-3 text-center">Вход — сотрудник</h3>
+          <form onSubmit={handleSubmit}>
+            {error && <div className="alert alert-danger">{error}</div>}
+            <div className="mb-3">
+              <label className="form-label">ИНН сотрудника</label>
+              <input
+                type="text"
+                value={inn}
+                onChange={(e) => setInn(e.target.value)}
+                className="form-control"
+                required
+              />
+            </div>
+            <div className="mb-3">
+              <label className="form-label">Пароль</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="form-control"
+                required
+              />
+            </div>
+
+            <div className="d-grid gap-2">
+              <button type="submit" className="btn btn-primary">Войти</button>
+            </div>
+          </form>
+
+          <hr />
+
+          <div className="text-center">
+            <button
+              className="btn btn-outline-secondary"
+              onClick={() => navigate('/login')}
+            >
+              Вход на налогоплательщиков
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LoginWorkersPage;
