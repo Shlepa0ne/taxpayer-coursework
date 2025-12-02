@@ -228,6 +228,22 @@ def create_test_tables():
             engine_power INTEGER
         )
         """,
+
+        """
+        CREATE TABLE IF NOT EXISTS inspection (
+            inspection_id SERIAL PRIMARY KEY,
+            taxpayer_id INTEGER,
+            inspection_date DATE
+        )
+        """,
+        
+        """
+        CREATE TABLE IF NOT EXISTS identified_violation (
+            violation_id SERIAL PRIMARY KEY,
+            inspection_id INTEGER,
+            description TEXT
+        )
+        """,
         
         # object_ownership
         """
@@ -238,6 +254,179 @@ def create_test_tables():
             taxpayer_id INTEGER,
             object_id INTEGER
         )
+        """,
+
+        # Промежуточная таблица для связи заявлений с типами налогов
+        """
+        CREATE TABLE IF NOT EXISTS tax_reduce_request_tax_type (
+            id SERIAL PRIMARY KEY,
+            request_id INTEGER,
+            tax_type_id INTEGER
+        )
+        """,
+        
+        # Промежуточная таблица для связи заявлений с периодами
+        """
+        CREATE TABLE IF NOT EXISTS rax_period_tax_reduce_request (
+            id SERIAL PRIMARY KEY,
+            period_id INTEGER,
+            request_id INTEGER
+        )
+        """,
+        
+        # Таблица периодов (если еще нет)
+        """
+        CREATE TABLE IF NOT EXISTS tax_period (
+            period_id SERIAL PRIMARY KEY,
+            start_date DATE,
+            end_date DATE,
+            period_type_id INTEGER
+        )
+        """,
+        
+        # Таблица типов периодов
+        """
+        CREATE TABLE IF NOT EXISTS period_type (
+            type_period_id SERIAL PRIMARY KEY,
+            name TEXT
+        )
+        """,
+        
+        # Таблица документов
+        """
+        CREATE TABLE IF NOT EXISTS document (
+            document_id SERIAL PRIMARY KEY,
+            series VARCHAR(15),
+            number VARCHAR(30),
+            issued_by TEXT,
+            issued_date DATE,
+            additional_info TEXT,
+            expire_date DATE,
+            "Ключ типа документа" INTEGER,
+            "Ключ налогоплательщика" INTEGER
+        )
+        """,
+        
+        # Таблица типов документов
+        """
+        CREATE TABLE IF NOT EXISTS document_type (
+            document_type_id SERIAL PRIMARY KEY,
+            name TEXT
+        )
+        """,
+        
+        # Таблица контактов
+        """
+        CREATE TABLE IF NOT EXISTS contact_data (
+            contact_id SERIAL PRIMARY KEY,
+            value TEXT,
+            contact_type_id INTEGER,
+            taxpayer_id INTEGER
+        )
+        """,
+        
+        # Таблица типов контактов
+        """
+        CREATE TABLE IF NOT EXISTS contact_type (
+            type_id SERIAL PRIMARY KEY,
+            name TEXT
+        )
+        """,
+
+        """
+        CREATE OR REPLACE FUNCTION public.calculate_risk_score(
+            p_taxpayer_id integer)
+            RETURNS integer
+            LANGUAGE 'plpgsql'
+            COST 100
+            VOLATILE PARALLEL UNSAFE
+        AS $BODY$
+        
+        DECLARE 
+            v_total_debt NUMERIC(20,2) := 0; 
+            v_oldest_debt_days INTEGER := 0; 
+            v_violations_count INTEGER := 0; 
+            v_score INTEGER := 0; 
+        BEGIN 
+            -- 1. Сумма неоплаченных налоговых начислений (с обработкой NULL)
+            SELECT COALESCE(SUM(ta.accrual_amount + COALESCE(ta.percent_amount, 0) - COALESCE(tp.total_paid, 0)), 0)
+            INTO v_total_debt
+            FROM tax_accrual ta
+            LEFT JOIN (
+                SELECT tax_income_id, SUM(payment_amount) as total_paid
+                FROM tax_payment
+                GROUP BY tax_income_id
+            ) tp ON ta.tax_accrual_id = tp.tax_income_id
+            WHERE ta.taxpayer_id = p_taxpayer_id
+            AND (ta.accrual_amount + COALESCE(ta.percent_amount, 0)) > COALESCE(tp.total_paid, 0);
+
+            -- 2. Самая старая просрочка по начислениям (в днях)
+            SELECT COALESCE(MAX(EXTRACT(DAYS FROM CURRENT_DATE - ta.accrual_date)), 0)
+            INTO v_oldest_debt_days
+            FROM tax_accrual ta
+            LEFT JOIN (
+                SELECT tax_income_id, SUM(payment_amount) as total_paid
+                FROM tax_payment
+                GROUP BY tax_income_id
+            ) tp ON ta.tax_accrual_id = tp.tax_income_id
+            WHERE ta.taxpayer_id = p_taxpayer_id
+            AND (ta.accrual_amount + COALESCE(ta.percent_amount, 0)) > COALESCE(tp.total_paid, 0);
+
+            -- 3. Количество нарушений за последние 3 года
+            SELECT COUNT(*)
+            INTO v_violations_count
+            FROM identified_violation iv
+            JOIN inspection i ON iv.inspection_id = i.inspection_id
+            WHERE i.taxpayer_id = p_taxpayer_id
+            AND i.inspection_date > CURRENT_DATE - INTERVAL '3 years';
+        
+            -- Расчет баллов по сумме задолженности (0-50) 
+            IF v_total_debt = 0 THEN 
+                v_score := v_score + 0; 
+            ELSIF v_total_debt <= 50000 THEN 
+                v_score := v_score + 10; 
+            ELSIF v_total_debt <= 100000 THEN 
+                v_score := v_score + 20; 
+            ELSIF v_total_debt <= 500000 THEN 
+                v_score := v_score + 30; 
+            ELSIF v_total_debt <= 1000000 THEN 
+                v_score := v_score + 40; 
+            ELSE 
+                v_score := v_score + 50; 
+            END IF; 
+        
+            -- Расчет баллов по длительности просрочки (0-30) 
+            IF v_oldest_debt_days = 0 THEN 
+                v_score := v_score + 0; 
+            ELSIF v_oldest_debt_days <= 30 THEN 
+                v_score := v_score + 5; 
+            ELSIF v_oldest_debt_days <= 90 THEN 
+                v_score := v_score + 10; 
+            ELSIF v_oldest_debt_days <= 180 THEN 
+                v_score := v_score + 15; 
+            ELSIF v_oldest_debt_days <= 365 THEN 
+                v_score := v_score + 20; 
+            ELSE 
+                v_score := v_score + 30; 
+            END IF; 
+        
+            -- Расчет баллов по количеству нарушений (0-20) 
+            IF v_violations_count = 0 THEN 
+                v_score := v_score + 0; 
+            ELSIF v_violations_count = 1 THEN 
+                v_score := v_score + 5; 
+            ELSIF v_violations_count = 2 THEN 
+                v_score := v_score + 10; 
+            ELSIF v_violations_count = 3 THEN 
+                v_score := v_score + 15; 
+            ELSE 
+                v_score := v_score + 20; 
+            END IF; 
+        
+            -- Ограничиваем 100 баллами 
+            RETURN LEAST(100, v_score); 
+        END; 
+        $BODY$;
         """
     ]
     
@@ -252,7 +441,8 @@ def create_test_data():
     """Создает базовые тестовые данные с высокими ID"""
     from api.models import (
         ReduceBase, ReduceType, TaxType, ReportStatus, 
-        TaxOfficer, Region, TaxRegime, ObjectType, RealEstateType
+        TaxOfficer, Region, TaxRegime, ObjectType, RealEstateType,
+        PeriodType, TaxPeriod, DocumentType, ContactType  # ДОБАВИТЬ ИМПОРТЫ
     )
     
     # Сначала очищаем таблицы от старых тестовых данных
@@ -265,6 +455,10 @@ def create_test_data():
         cursor.execute("DELETE FROM tax_regime WHERE regime_id >= 9990")
         cursor.execute("DELETE FROM object_type WHERE object_type_id >= 9990")
         cursor.execute("DELETE FROM real_estate_type WHERE real_estate_type_id >= 9990")
+        cursor.execute("DELETE FROM tax_period WHERE period_id >= 9990")
+        cursor.execute("DELETE FROM period_type WHERE type_period_id >= 9990")
+        cursor.execute("DELETE FROM document_type WHERE document_type_id >= 9990")
+        cursor.execute("DELETE FROM contact_type WHERE type_id >= 9990")
     
     # Регионы
     Region.objects.get_or_create(
@@ -356,6 +550,42 @@ def create_test_data():
         defaults={'real_estate_type_name': 'Земельный участок'}
     )
 
+    # Типы периодов
+    PeriodType.objects.get_or_create(
+        type_period_id=1,
+        defaults={'name': 'Годовой'}
+    )
+    PeriodType.objects.get_or_create(
+        type_period_id=2,
+        defaults={'name': 'Квартальный'}
+    )
+    PeriodType.objects.get_or_create(
+        type_period_id=3,
+        defaults={'name': 'Месячный'}
+    )
+    
+    # Периоды
+    TaxPeriod.objects.get_or_create(
+        period_id=9991,
+        defaults={
+            'start_date': '2024-01-01',
+            'end_date': '2024-03-31',
+            'period_type_id': 2  # Квартальный
+        }
+    )
+    
+    # Типы документов
+    DocumentType.objects.get_or_create(
+        document_type_id=9991,
+        defaults={'name': 'Паспорт'}
+    )
+    
+    # Типы контактов
+    ContactType.objects.get_or_create(
+        type_id=9991,
+        defaults={'name': 'Телефон'}
+    )
+
 @pytest.fixture(autouse=True)
 def enable_db_access_for_all_tests(db):
     """Обеспечивает доступ к БД для всех тестов"""
@@ -367,8 +597,6 @@ def db_setup():
     close_db_connections()
     yield
     close_db_connections()
-
-# ДОБАВЛЯЕМ ОТСУТСТВУЮЩИЕ ФИКСТУРЫ
 
 @pytest.fixture
 def taxpayer_user():

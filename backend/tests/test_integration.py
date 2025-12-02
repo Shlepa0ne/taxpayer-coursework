@@ -17,30 +17,94 @@ class FullTaxpayerWorkflowTest(TestCase):
         self.taxpayer_inn = '123456789012'
         self.test_password = 'testpassword'
         
-        # Создаем налогоплательщика с уникальным ID
-        self.taxpayer = Taxpayer.objects.create(
-            taxpayer_id=10001,  # Уникальный высокий ID
-            inn=self.taxpayer_inn,
-            fio='Иванов Иван Иванович',
-            payer_type_id=1,
-            region_key=9991,
-            tax_regime_id=9991,
-            payer_status_id=1,
-            opf_id=1,
-            origin_id=1
-        )
-        TaxpayerAuth.objects.create(
-            inn=self.taxpayer_inn,
-            password_hash=make_password(self.test_password)
+        # Используем get_or_create для всех объектов вместо create
+        self.region, _ = Region.objects.get_or_create(
+            region_id=9991,
+            defaults={'name': 'Москва', 'code': '77'}
         )
         
-        # Используем существующие объекты вместо создания новых
-        self.reduce_base = ReduceBase.objects.get(reduce_base_id=9991)
-        self.reduce_type = ReduceType.objects.get(reduce_type_id=9991)
-        self.tax_type = TaxType.objects.get(tax_type_id=13)
-        self.tax_officer = TaxOfficer.objects.get(tax_officer_id=9991)
-        self.report_status = ReportStatus.objects.get(report_status_id=9991)
+        self.tax_regime, _ = TaxRegime.objects.get_or_create(
+            regime_id=9991,
+            defaults={'name': 'Общий режим', 'description': 'Общая система налогообложения'}
+        )
+        
+        self.reduce_base, _ = ReduceBase.objects.get_or_create(
+            reduce_base_id=9991,
+            defaults={'reduce_base_name': 'Медицинские расходы'}
+        )
+        
+        self.reduce_type, _ = ReduceType.objects.get_or_create(
+            reduce_type_id=9991,
+            defaults={'reduce_type_name': 'Социальный вычет'}
+        )
+        
+        self.tax_type, _ = TaxType.objects.get_or_create(
+            tax_type_id=13,
+            defaults={'tax_type_name': 'НДФЛ'}
+        )
+        
+        self.report_status, _ = ReportStatus.objects.get_or_create(
+            report_status_id=9991,
+            defaults={'report_status_name': 'На рассмотрении'}
+        )
+        
+        # Объекты с ID=1, которые используются в API
+        default_report_status, _ = ReportStatus.objects.get_or_create(
+            report_status_id=1,
+            defaults={'report_status_name': 'Статус по умолчанию'}
+        )
+        
+        self.tax_officer, _ = TaxOfficer.objects.get_or_create(
+            tax_officer_id=9991,
+            defaults={
+                'tax_officer_name': 'Тестовый сотрудник',
+                'unit': 'Тестовый отдел',
+                'role_id': 1
+            }
+        )
+        
+        default_tax_officer, _ = TaxOfficer.objects.get_or_create(
+            tax_officer_id=1,
+            defaults={
+                'tax_officer_name': 'Сотрудник по умолчанию',
+                'unit': 'Отдел по умолчанию',
+                'role_id': 1
+            }
+        )
+        
+        # Создаем налогоплательщика с использованием get_or_create
+        self.taxpayer, created = Taxpayer.objects.get_or_create(
+            taxpayer_id=10001,
+            defaults={
+                'inn': self.taxpayer_inn,
+                'fio': 'Иванов Иван Иванович',
+                'payer_type_id': 1,
+                'region_key': self.region.region_id,
+                'tax_regime_id': self.tax_regime.regime_id,
+                'payer_status_id': 1,
+                'opf_id': 1,
+                'origin_id': 1
+            }
+        )
+        
+        # Если налогоплательщик был создан, создаем аутентификацию
+        if created:
+            TaxpayerAuth.objects.create(
+                inn=self.taxpayer_inn,
+                password_hash=make_password(self.test_password)
+            )
+        else:
+            # Если уже существует, обновляем пароль
+            auth, _ = TaxpayerAuth.objects.get_or_create(
+                inn=self.taxpayer_inn,
+                defaults={'password_hash': make_password(self.test_password)}
+            )
+            # Если уже существовал, обновляем пароль
+            if not _:
+                auth.password_hash = make_password(self.test_password)
+                auth.save()
 
+    @pytest.mark.django_db
     def test_full_user_workflow(self):
         # 1. Логин
         login_data = {

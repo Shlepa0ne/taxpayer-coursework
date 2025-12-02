@@ -25,7 +25,6 @@ import DocumentModal from './components/DocumentModal';
 import ObjectModal from './components/ObjectModal';
 import TaxpayerDetailView from './components/TaxpayerDetailView';
 import SearchForm from './components/SearchForm';
-import SearchResults from './components/SearchResults';
 import { getRiskScoreColor, getRiskScoreText, formatCurrency } from '../../utils/formatters';
 
 const WorkerTaxpayerSearch = () => {
