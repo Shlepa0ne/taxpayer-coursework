@@ -61,8 +61,8 @@ const DeclarationList = () => {
   const getStatusInfo = (declaration) => {
     const statusMap = {
       1: { text: 'Черновик', class: 'secondary' },
-      2: { text: 'Подана', class: 'success' },
-      3: { text: 'Принята', class: 'primary' },
+      2: { text: 'Подана', class: 'warning' },
+      3: { text: 'Принята', class: 'success' },
       4: { text: 'Отклонена', class: 'danger' }
     };
     
