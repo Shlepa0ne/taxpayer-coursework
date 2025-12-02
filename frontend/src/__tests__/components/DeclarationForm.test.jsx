@@ -1,3 +1,4 @@
+// frontend/src/__tests__/components/DeclarationForm.test.js
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DeclarationForm from '../../features/declarations/DeclarationForm';

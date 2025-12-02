@@ -1,4 +1,12 @@
+// frontend/src/setupTests.js
 import '@testing-library/jest-dom';
+
+// Polyfills для Node.js среды
+if (typeof TextEncoder === 'undefined') {
+  const { TextEncoder, TextDecoder } = require('util');
+  global.TextEncoder = TextEncoder;
+  global.TextDecoder = TextDecoder;
+}
 
 // Mock для localStorage
 const localStorageMock = {
@@ -9,7 +17,7 @@ const localStorageMock = {
 };
 global.localStorage = localStorageMock;
 
-// Mock для window.matchMedia
+// Mock для matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: jest.fn().mockImplementation(query => ({
@@ -30,3 +38,31 @@ global.ResizeObserver = jest.fn().mockImplementation(() => ({
   unobserve: jest.fn(),
   disconnect: jest.fn(),
 }));
+
+// Mock для IntersectionObserver
+global.IntersectionObserver = jest.fn(() => ({
+  observe: jest.fn(),
+  unobserve: jest.fn(),
+  disconnect: jest.fn(),
+}));
+
+// Mock для fetch
+global.fetch = jest.fn();
+
+// Убираем предупреждения о тестах
+const originalError = console.error;
+beforeAll(() => {
+  console.error = (...args) => {
+    if (
+      typeof args[0] === 'string' &&
+      args[0].includes('Warning: ReactDOM.render is no longer supported')
+    ) {
+      return;
+    }
+    originalError.call(console, ...args);
+  };
+});
+
+afterAll(() => {
+  console.error = originalError;
+});
