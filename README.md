@@ -105,3 +105,87 @@ python manage.py runserver
 npm run dev
 ```
 > Клиентское приложение будет доступно по адресу: `http://localhost:5173` (или по другому порту, указанному Vite).
+
+
+## ТЕСТИРОВАНИЕ
+
+### 1. Backend (Django / DRF) — pytest
+
+#### Установка
+```bash
+# из папки /backend
+cd backend
+
+# создать и активировать venv (macOS/Linux)
+python3 -m venv venv
+source venv/bin/activate
+
+# Windows
+# python -m venv venv
+# venv\Scripts\activate
+
+pip install -r requirements.txt
+# при необходимости:
+pip install pytest pytest-django pytest-cov pytest-xdist
+```
+
+#### Запуск всех тестов
+```bash
+pytest
+```
+
+#### С покрытием
+```bash
+pytest --cov=. --cov-report=term --cov-report=html
+# результат в ./htmlcov/index.html
+```
+
+#### Запустить конкретный файл/тест
+```bash
+pytest tests/test_models.py
+pytest tests/test_models.py::test_taxpayer_str
+pytest -k "keyword"
+```
+
+### Примечания
+
+* Убедитесь, что .env (DATABASE, SECRET_KEY) настроен или указан DJANGO_SETTINGS_MODULE для тестов.
+
+* Pytest создаёт тестовую БД автоматически.
+
+### 2. Frontend (React + Vite) — Jest / React Testing Library
+
+#### Установка
+
+```bash
+# из папки /frontend
+cd frontend
+npm install
+```
+
+#### Запуск тестов
+
+```bash
+npm test
+```
+
+#### С покрытием
+
+```bash
+npm test -- --coverage --watchAll=false
+# отчёт в ./coverage
+```
+
+#### Запустить конкретный тест
+
+```bash
+npm test -- LoginForm
+# или
+npx jest src/components/__tests__/LoginForm.test.jsx
+```
+
+### 3. Где лежат тесты
+
+* Backend: /backend/tests/ или */tests.py.
+
+* Frontend: /frontend/src/__tests
