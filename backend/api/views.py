@@ -24,6 +24,7 @@ from django.http import HttpResponse
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import os
+from rest_framework.pagination import PageNumberPagination
 
 class TaxpayerListAPIView(generics.ListAPIView):
     queryset = Taxpayer.objects.all()
@@ -1081,11 +1082,28 @@ class RegionListAPIView(generics.ListAPIView):
             return Response(data)
         except Exception as e:
             return Response({'error': f'Ошибка загрузки регионов: {str(e)}'}, status=500)
-        
+
+class RequestPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'total_pages': self.page.paginator.num_pages,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'results': data,
+            'page': self.page.number,
+        })
+
+
 class WorkerRequestsForReviewAPIView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [InnAuthentication]
     serializer_class = TaxReduceRequestDetailSerializer
+    pagination_class = RequestPagination
     
     def get_queryset(self):
         # Заявления со статусом "на рассмотрении" (1), отсортированные по дате
@@ -1503,12 +1521,27 @@ class PayerStatusListAPIView(generics.ListAPIView):
         except Exception as e:
             return Response({'error': f'Ошибка загрузки статусов: {str(e)}'}, status=500)
         
-# Добавим в views.py
+
+class DeclarationPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'total_pages': self.page.paginator.num_pages,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'results': data,
+            'page': self.page.number,
+        })
 
 class WorkerDeclarationsForReviewAPIView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [InnAuthentication]
     serializer_class = DeclarationListSerializer
+    pagination_class = DeclarationPagination
     
     def get_queryset(self):
         # Получаем декларации со статусом "подана" (2), отсортированные по дате
@@ -1580,20 +1613,55 @@ class WorkerDeclarationUpdateAPIView(APIView):
                 {'error': f'Ошибка при обновлении декларации: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
+
+class InspectionPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'total_pages': self.page.paginator.num_pages,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'results': data,
+            'page': self.page.number,
+        })
+
 class WorkerInspectionsListAPIView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [InnAuthentication]
 
     def get(self, request):
         user_inn = request.user.username
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 10))
+        
         try:
             worker_auth = WorkerAuth.objects.get(inn=user_inn)
             
             if worker_auth.tax_officer:
                 tax_officer_id = worker_auth.tax_officer.tax_officer_id
                 
-                # Получаем проверки, в которых участвует текущий сотрудник
+                # Создаем пагинатор
+                paginator = InspectionPagination()
+                
+                # Получаем общее количество
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT COUNT(DISTINCT i.inspection_id)
+                        FROM inspection i
+                        INNER JOIN tax_officer_inspection toi ON i.inspection_id = toi.inspection_id
+                        INNER JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
+                        WHERE toi.tax_officer_id = %s
+                    """, [tax_officer_id])
+                    total_count = cursor.fetchone()[0]
+                
+                # Рассчитываем offset
+                offset = (page - 1) * page_size
+                
+                # Получаем проверки с пагинацией
                 with connection.cursor() as cursor:
                     cursor.execute("""
                         SELECT DISTINCT i.inspection_id, i.inspection_date, i.inspection_type_id, 
@@ -1604,7 +1672,8 @@ class WorkerInspectionsListAPIView(APIView):
                         INNER JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
                         WHERE toi.tax_officer_id = %s
                         ORDER BY i.inspection_date DESC
-                    """, [tax_officer_id])
+                        LIMIT %s OFFSET %s
+                    """, [tax_officer_id, page_size, offset])
                     results = cursor.fetchall()
                 
                 # Создаем список Inspection объектов
@@ -1626,7 +1695,18 @@ class WorkerInspectionsListAPIView(APIView):
                     }
                     inspections.append(inspection)
                 
-                return Response(inspections)
+                # Создаем пагинированный ответ
+                paginated_data = paginator.paginate_queryset(inspections, request)
+                response_data = {
+                    'count': total_count,
+                    'total_pages': (total_count + page_size - 1) // page_size,
+                    'next': paginator.get_next_link(),
+                    'previous': paginator.get_previous_link(),
+                    'results': paginated_data,
+                    'page': page
+                }
+                
+                return Response(response_data)
             else:
                 return Response([])
                 
@@ -2290,9 +2370,12 @@ class AllInspectionsListAPIView(APIView):
     authentication_classes = [InnAuthentication]
 
     def get(self, request):
+        # Проверяем, является ли сотрудник старшим инспектором или руководителем
+        user_inn = request.user.username
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 10))
+        
         try:
-            # Проверяем, является ли сотрудник старшим инспектором или руководителем
-            user_inn = request.user.username
             worker_auth = WorkerAuth.objects.get(inn=user_inn)
             
             if not worker_auth.tax_officer or worker_auth.tax_officer.role_id < 2:
@@ -2301,7 +2384,22 @@ class AllInspectionsListAPIView(APIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
-            # Получаем все проверки
+            # Создаем пагинатор
+            paginator = InspectionPagination()
+            
+            # Получаем общее количество
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT COUNT(DISTINCT i.inspection_id)
+                    FROM inspection i
+                    INNER JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
+                """)
+                total_count = cursor.fetchone()[0]
+            
+            # Рассчитываем offset
+            offset = (page - 1) * page_size
+            
+            # Получаем все проверки с пагинацией
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT DISTINCT i.inspection_id, i.inspection_date, i.inspection_type_id, 
@@ -2310,7 +2408,8 @@ class AllInspectionsListAPIView(APIView):
                     FROM inspection i
                     INNER JOIN taxpayer t ON i.taxpayer_id = t.taxpayer_id
                     ORDER BY i.inspection_date DESC
-                """)
+                    LIMIT %s OFFSET %s
+                """, [page_size, offset])
                 results = cursor.fetchall()
             
             inspections = []
@@ -2331,7 +2430,18 @@ class AllInspectionsListAPIView(APIView):
                 }
                 inspections.append(inspection)
             
-            return Response(inspections)
+            # Создаем пагинированный ответ
+            paginated_data = paginator.paginate_queryset(inspections, request)
+            response_data = {
+                'count': total_count,
+                'total_pages': (total_count + page_size - 1) // page_size,
+                'next': paginator.get_next_link(),
+                'previous': paginator.get_previous_link(),
+                'results': paginated_data,
+                'page': page
+            }
+            
+            return Response(response_data)
                 
         except WorkerAuth.DoesNotExist:
             return Response([])
@@ -3471,3 +3581,4 @@ class GenerateReportAPIView(APIView):
         except Exception as e:
             print(f"ERROR in get_filter_info: {str(e)}")
             return "все данные"
+    

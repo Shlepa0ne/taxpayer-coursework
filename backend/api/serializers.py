@@ -1021,3 +1021,19 @@ class WorkerUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TaxOfficer
         fields = ['tax_officer_name', 'unit', 'role_id']
+
+class PaginatedDeclarationListSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    total_pages = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = DeclarationListSerializer(many=True)
+    page = serializers.IntegerField()
+
+class PaginatedRequestListSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    total_pages = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = TaxReduceRequestDetailSerializer(many=True)
+    page = serializers.IntegerField()

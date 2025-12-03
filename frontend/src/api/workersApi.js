@@ -33,8 +33,10 @@ export const getTaxpayerDetail = async (taxpayerId) => {
 };
 
 // Получить список заявлений для рассмотрения
-export const getRequestsForReview = async () => {
-  const { data } = await axiosInstance.get('/worker/requests-for-review/');
+export const getRequestsForReview = async (page = 1, pageSize = 10) => {
+  const { data } = await axiosInstance.get('/worker/requests-for-review/', { 
+    params: { page, page_size: pageSize } 
+  });
   return data;
 };
 
@@ -140,8 +142,10 @@ export const updateInspectionViolation = async (violationId, violationData) => {
 };
 
 // Декларации
-export const getDeclarationsForReview = async () => {
-  const { data } = await axiosInstance.get('/worker/declarations-for-review/');
+export const getDeclarationsForReview = async (page = 1, pageSize = 10) => {
+  const { data } = await axiosInstance.get('/worker/declarations-for-review/', { 
+    params: { page, page_size: pageSize } 
+  });
   return data;
 };
 
@@ -202,8 +206,10 @@ export const createInspection = async (inspectionData) => {
 };
 
 // Получить список проверок сотрудника
-export const getWorkerInspections = async () => {
-  const { data } = await axiosInstance.get('/worker/inspections/');
+export const getWorkerInspections = async (page = 1, pageSize = 10) => {
+  const { data } = await axiosInstance.get('/worker/inspections/', { 
+    params: { page, page_size: pageSize } 
+  });
   return data;
 };
 
@@ -268,10 +274,13 @@ export const deleteViolation = async (violationId) => {
 };
 
 // Получить все проверки (для старших инспекторов и руководителей)
-export const getAllInspections = async () => {
-  const { data } = await axiosInstance.get('/worker/all-inspections/');
+export const getAllInspections = async (page = 1, pageSize = 10) => {
+  const { data } = await axiosInstance.get('/worker/all-inspections/', { 
+    params: { page, page_size: pageSize } 
+  });
   return data;
 };
+
 
 // Обновить проверку
 export const updateInspection = async (inspectionId, inspectionData) => {
