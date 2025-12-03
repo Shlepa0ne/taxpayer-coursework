@@ -102,4 +102,8 @@ urlpatterns = [
     path('worker/worker-search/', WorkerSearchAPIView.as_view(), name='worker-search'),
     path('worker/worker-detail/<int:worker_id>/', WorkerDetailAPIView.as_view(), name='worker-detail'),
     path('worker/generate-report/', GenerateReportAPIView.as_view(), name='generate-report'),
+
+    # Генерация ОГРН и ОГРНИП
+    path('worker/generate-ogrn/', GenerateOGRNView.as_view(), name='generate-ogrn'),
+    path('worker/generate-ogrnip/', GenerateOGRNIPView.as_view(), name='generate-ogrnip'),
 ]

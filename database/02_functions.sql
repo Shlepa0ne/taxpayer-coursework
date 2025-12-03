@@ -683,35 +683,81 @@ ALTER FUNCTION public.create_tax_accrual_on_declaration_accept() OWNER TO postgr
 -- Name: generate_ogrn(character varying, character varying, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.generate_ogrn(p_region_code character varying, p_tax_office_code character varying, p_year integer DEFAULT NULL::integer) RETURNS character varying
+CREATE OR REPLACE FUNCTION public.generate_ogrn(
+    p_region_code character varying,
+    p_tax_office_code character varying DEFAULT '77',
+    p_year integer DEFAULT NULL
+) RETURNS character varying
     LANGUAGE plpgsql
-    AS $$ 
+    STRICT
+AS $$
 DECLARE 
     v_ogrn VARCHAR(13); 
     v_base VARCHAR(12); 
     v_control_digit INTEGER; 
     v_year CHAR(2); 
+    v_region_clean VARCHAR(2);
+    v_tax_office_clean VARCHAR(2);
+    v_random_part VARCHAR(5);
 BEGIN 
+    -- Очищаем коды от нецифровых символов
+    v_region_clean := regexp_replace(p_region_code, '[^0-9]', '', 'g');
+    v_tax_office_clean := regexp_replace(p_tax_office_code, '[^0-9]', '', 'g');
+    
+    -- Проверяем и нормализуем код региона (должно быть 2 цифры)
+    IF length(v_region_clean) >= 2 THEN
+        v_region_clean := substring(v_region_clean from '(\d{2})$');
+    ELSIF length(v_region_clean) = 1 THEN
+        v_region_clean := '0' || v_region_clean;
+    ELSE
+        v_region_clean := '77'; -- Москва по умолчанию
+    END IF;
+    
+    -- Проверяем и нормализуем код налоговой инспекции
+    IF length(v_tax_office_clean) >= 2 THEN
+        v_tax_office_clean := substring(v_tax_office_clean from '(\d{2})$');
+    ELSIF length(v_tax_office_clean) = 1 THEN
+        v_tax_office_clean := '0' || v_tax_office_clean;
+    ELSE
+        v_tax_office_clean := '77'; -- По умолчанию
+    END IF;
+    
     -- Определяем год (последние две цифры) 
-    IF p_year IS NULL THEN 
+    IF p_year IS NULL OR p_year < 2000 OR p_year > 2100 THEN 
         v_year := to_char(CURRENT_DATE, 'YY'); 
     ELSE 
         v_year := to_char(p_year, 'FM00'); 
     END IF; 
-     
-    v_base := '1' || v_year ||  
-             lpad(p_region_code, 2, '0') ||  
-             lpad(p_tax_office_code, 2, '0') || 
-             lpad(floor(random() * 100000)::TEXT, 5, '0'); 
-     
+    
+    -- Генерируем случайную часть (5 цифр)
+    v_random_part := lpad(floor(random() * 100000)::TEXT, 5, '0');
+    
+    -- Формируем base (12 цифр)
+    v_base := '1' || v_year || v_region_clean || v_tax_office_clean || v_random_part;
+    
+    -- Проверяем, что v_base состоит только из цифр
+    IF v_base !~ '^[0-9]{12}$' THEN
+        RAISE EXCEPTION 'Generated base contains non-digits or wrong length: %', v_base;
+    END IF;
+    
+    -- Контрольная цифра для ОГРН (13 цифр): (основание % 11) % 10
     v_control_digit := (v_base::BIGINT % 11) % 10; 
-     
+    
     v_ogrn := v_base || v_control_digit::TEXT; 
-     
+    
+    -- Проверяем валидность сгенерированного ОГРН
+    IF NOT public.validate_ogrn(v_ogrn) THEN
+        RAISE EXCEPTION 'Generated OGRN is invalid: %', v_ogrn;
+    END IF;
+    
     RETURN v_ogrn; 
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Возвращаем ОГРН по умолчанию в случае ошибки
+        RETURN '1' || to_char(CURRENT_DATE, 'YY') || '77' || '77' || '00000' || 
+               ((('1' || to_char(CURRENT_DATE, 'YY') || '77' || '77' || '00000')::BIGINT % 11) % 10)::TEXT;
 END; 
 $$;
-
 
 ALTER FUNCTION public.generate_ogrn(p_region_code character varying, p_tax_office_code character varying, p_year integer) OWNER TO postgres;
 
@@ -720,31 +766,79 @@ ALTER FUNCTION public.generate_ogrn(p_region_code character varying, p_tax_offic
 -- Name: generate_ogrnip(character varying, character varying, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.generate_ogrnip(p_region_code character varying, p_tax_office_code character varying, p_year integer DEFAULT NULL::integer) RETURNS character varying
+CREATE OR REPLACE FUNCTION public.generate_ogrnip(
+    p_region_code character varying,
+    p_tax_office_code character varying DEFAULT '77',
+    p_year integer DEFAULT NULL
+) RETURNS character varying
     LANGUAGE plpgsql
-    AS $$ 
+    STRICT
+AS $$
 DECLARE 
     v_ogrnip VARCHAR(15); 
     v_base VARCHAR(14); 
     v_control_digit INTEGER; 
     v_year CHAR(2); 
+    v_region_clean VARCHAR(2);
+    v_tax_office_clean VARCHAR(2);
+    v_random_part VARCHAR(7);
 BEGIN 
-    IF p_year IS NULL THEN 
+    -- Очищаем коды от нецифровых символов
+    v_region_clean := regexp_replace(p_region_code, '[^0-9]', '', 'g');
+    v_tax_office_clean := regexp_replace(p_tax_office_code, '[^0-9]', '', 'g');
+    
+    -- Проверяем и нормализуем код региона (должно быть 2 цифры)
+    IF length(v_region_clean) >= 2 THEN
+        v_region_clean := substring(v_region_clean from '(\d{2})$');
+    ELSIF length(v_region_clean) = 1 THEN
+        v_region_clean := '0' || v_region_clean;
+    ELSE
+        v_region_clean := '77'; -- Москва по умолчанию
+    END IF;
+    
+    -- Проверяем и нормализуем код налоговой инспекции
+    IF length(v_tax_office_clean) >= 2 THEN
+        v_tax_office_clean := substring(v_tax_office_clean from '(\d{2})$');
+    ELSIF length(v_tax_office_clean) = 1 THEN
+        v_tax_office_clean := '0' || v_tax_office_clean;
+    ELSE
+        v_tax_office_clean := '77'; -- По умолчанию
+    END IF;
+    
+    -- Определяем год (последние две цифры) 
+    IF p_year IS NULL OR p_year < 2000 OR p_year > 2100 THEN 
         v_year := to_char(CURRENT_DATE, 'YY'); 
     ELSE 
         v_year := to_char(p_year, 'FM00'); 
     END IF; 
-     
-    v_base := '3' || v_year ||  
-             lpad(p_region_code, 2, '0') ||  
-             lpad(p_tax_office_code, 2, '0') || 
-             lpad(floor(random() * 10000000)::TEXT, 7, '0'); 
-     
+    
+    -- Генерируем случайную часть (7 цифр)
+    v_random_part := lpad(floor(random() * 10000000)::TEXT, 7, '0');
+    
+    -- Формируем base (14 цифр)
+    v_base := '3' || v_year || v_region_clean || v_tax_office_clean || v_random_part;
+    
+    -- Проверяем, что v_base состоит только из цифр
+    IF v_base !~ '^[0-9]{14}$' THEN
+        RAISE EXCEPTION 'Generated base contains non-digits or wrong length: %', v_base;
+    END IF;
+    
+    -- Контрольная цифра для ОГРНИП (15 цифр): (основание % 13) % 10
     v_control_digit := (v_base::BIGINT % 13) % 10; 
-     
+    
     v_ogrnip := v_base || v_control_digit::TEXT; 
-     
+    
+    -- Проверяем валидность сгенерированного ОГРНИП
+    IF NOT public.validate_ogrnip(v_ogrnip) THEN
+        RAISE EXCEPTION 'Generated OGRNIP is invalid: %', v_ogrnip;
+    END IF;
+    
     RETURN v_ogrnip; 
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Возвращаем ОГРНИП по умолчанию в случае ошибки
+        RETURN '3' || to_char(CURRENT_DATE, 'YY') || '77' || '77' || '0000000' || 
+               ((('3' || to_char(CURRENT_DATE, 'YY') || '77' || '77' || '0000000')::BIGINT % 13) % 10)::TEXT;
 END; 
 $$;
 

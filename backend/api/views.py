@@ -3581,4 +3581,156 @@ class GenerateReportAPIView(APIView):
         except Exception as e:
             print(f"ERROR in get_filter_info: {str(e)}")
             return "все данные"
+        
+
+class GenerateOGRNView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    region_code_2digits = '77'
+
+    def post(self, request):
+        region_key = request.data.get('region_key')
+        
+        if not region_key:
+            return Response({'error': 'Не указан регион'}, status=400)
+        
+        try:
+            # Получаем код региона из базы
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT code FROM region WHERE region_id = %s
+                """, [region_key])
+                region_result = cursor.fetchone()
+                
+                if region_result and region_result[0]:
+                    region_code = str(region_result[0])
+                    # Извлекаем только цифры
+                    import re
+                    digits = re.sub(r'\D', '', region_code)
+                    # Берем последние 2 цифры
+                    if digits and len(digits) >= 2:
+                        region_code_2digits = digits[-2:]
+                    else:
+                        region_code_2digits = '77'  # Москва по умолчанию
+                else:
+                    region_code_2digits = '77'  # Москва по умолчанию
+            
+            print(f"DEBUG: Using region code: {region_code_2digits}")  # Отладочная информация
+            
+            # Пытаемся использовать функцию из базы данных
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT generate_ogrn(%s, '77', EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER)
+                    """, [region_code_2digits])
+                    result = cursor.fetchone()
+                    
+                    if result and result[0]:
+                        return Response({'ogrn': result[0]})
+            except Exception as db_error:
+                pass
+                # Продолжаем с ручной генерацией
+            
+            # Ручная генерация как fallback
+            ogrn = self.generate_ogrn_manual(region_code_2digits)
+            return Response({'ogrn': ogrn})
+                    
+        except Exception as e:
+            print(f"Error generating OGRN: {str(e)}")
+            # Используем ручную генерацию как fallback
+            ogrn = self.generate_ogrn_manual(region_code_2digits)
+            return Response({'ogrn': ogrn})
     
+    def generate_ogrn_manual(self, region_code):
+        """Резервная функция для генерации ОГРН"""
+        import random
+        from datetime import datetime
+        
+        # Проверяем, что region_code состоит из 2 цифр
+        if not region_code or not region_code.isdigit() or len(region_code) != 2:
+            region_code = '77'  # Значение по умолчанию для Москвы
+        
+        # Берем последние 2 цифры года
+        year = str(datetime.now().year)[-2:]
+        
+        # Формируем 12-значное основание
+        base = '1' + year + region_code + '77' + str(random.randint(0, 99999)).zfill(5)
+        
+        # Контрольная цифра для ОГРН: (основание % 11) % 10
+        control = str((int(base) % 11) % 10)
+        
+        return base + control
+
+class GenerateOGRNIPView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+    region_code_2digits = '77'
+
+    def post(self, request):
+        region_key = request.data.get('region_key')
+        
+        if not region_key:
+            return Response({'error': 'Не указан регион'}, status=400)
+        
+        try:
+            # Получаем код региона из базы
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT code FROM region WHERE region_id = %s
+                """, [region_key])
+                region_result = cursor.fetchone()
+                
+                if region_result and region_result[0]:
+                    region_code = str(region_result[0])
+                    # Извлекаем только цифры
+                    import re
+                    digits = re.sub(r'\D', '', region_code)
+                    # Берем последние 2 цифры
+                    if digits and len(digits) >= 2:
+                        region_code_2digits = digits[-2:]
+                    else:
+                        region_code_2digits = '77'
+                else:
+                    region_code_2digits = '77'
+
+            print(f"DEBUG: Using region code: {region_code_2digits}")  # Отладочная информация
+            
+            # Пытаемся использовать функцию из базы данных
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT generate_ogrnip(%s, '77', EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER)
+                """, [region_code_2digits])
+                result = cursor.fetchone()
+                
+                if result and result[0]:
+                    return Response({'ogrn': result[0]})
+            
+            # Если функция не сработала, используем ручную генерацию
+            ogrnip = self.generate_ogrnip_manual(region_code_2digits)
+            return Response({'ogrn': ogrnip})
+                
+        except Exception as e:
+            print(f"Error generating OGRNIP: {str(e)}")
+            # Используем ручную генерацию как fallback
+            ogrnip = self.generate_ogrnip_manual(region_code_2digits)
+            return Response({'ogrn': ogrnip})
+    
+    def generate_ogrnip_manual(self, region_code):
+        """Резервная функция для генерации ОГРНИП"""
+        import random
+        from datetime import datetime
+        
+        # Проверяем, что region_code состоит из 2 цифр
+        if not region_code or not region_code.isdigit() or len(region_code) != 2:
+            region_code = '77'  # Значение по умолчанию для Москвы
+        
+        # Берем последние 2 цифры года
+        year = str(datetime.now().year)[-2:]
+        
+        # Формируем 14-значное основание
+        base = '3' + year + region_code + '77' + str(random.randint(0, 9999999)).zfill(7)
+        
+        # Контрольная цифра: (основание % 13) % 10
+        control = str((int(base) % 13) % 10)
+        
+        return base + control

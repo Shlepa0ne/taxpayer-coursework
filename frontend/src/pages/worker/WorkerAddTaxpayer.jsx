@@ -1,7 +1,14 @@
 // frontend/src/pages/worker/WorkerAddTaxpayer.jsx
 import React, { useState, useEffect } from 'react';
-import { generateINN, createTaxpayer, getRegions, getTaxRegimes, resetTaxpayerPassword } from '../../api/workersApi';
-import { formatDateForInput } from '../../utils/formatters';
+import { 
+  generateINN, 
+  createTaxpayer, 
+  getRegions, 
+  getTaxRegimes, 
+  resetTaxpayerPassword,
+  generateOGRN, // НОВАЯ ФУНКЦИЯ
+  generateOGRNIP // НОВАЯ ФУНКЦИЯ
+} from '../../api/workersApi';
 
 const WorkerAddTaxpayer = () => {
   const [step, setStep] = useState(1);
@@ -23,12 +30,14 @@ const WorkerAddTaxpayer = () => {
   });
   const [generatedPassword, setGeneratedPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingINN, setLoadingINN] = useState(false);
+  const [loadingOGRN, setLoadingOGRN] = useState(false);
   const [error, setError] = useState('');
   const [regions, setRegions] = useState([]);
   const [taxRegimes, setTaxRegimes] = useState([]);
 
   // Состояния для сброса пароля
-  const [resetStep, setResetStep] = useState(1); // 1 - ввод ИНН, 2 - подтверждение, 3 - результат
+  const [resetStep, setResetStep] = useState(1);
   const [resetINN, setResetINN] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [countdown, setCountdown] = useState(10);
@@ -49,8 +58,8 @@ const WorkerAddTaxpayer = () => {
     return () => clearTimeout(timer);
   }, [resetStep, countdown]);
 
-  // В useEffect для загрузки данных добавляем проверку
-  React.useEffect(() => {
+  // Загрузка справочников
+  useEffect(() => {
     const fetchData = async () => {
       try {
         const [regionsData, regimesData] = await Promise.all([
@@ -58,13 +67,12 @@ const WorkerAddTaxpayer = () => {
           getTaxRegimes()
         ]);
         
-        console.log('Regions data:', regionsData); // Для отладки
-        console.log('Tax regimes data:', regimesData); // Для отладки
+        console.log('Regions data:', regionsData);
+        console.log('Tax regimes data:', regimesData);
         
         setRegions(regionsData);
         setTaxRegimes(regimesData);
         
-        // Если регионы загружены, устанавливаем Москву как регион по умолчанию
         const moscowRegion = regionsData.find(region => region.code === '777');
         if (moscowRegion) {
           setFormData(prev => ({ ...prev, region_key: moscowRegion.region_id }));
@@ -83,16 +91,16 @@ const WorkerAddTaxpayer = () => {
     { id: 3, label: 'Юридическое лицо', description: 'Организация' }
   ];
 
-  // Функции для добавления налогоплательщика (остаются без изменений)
+  // Функции для добавления налогоплательщика
   const handlePayerTypeSelect = (payerTypeId) => {
     setFormData(prev => ({
       ...prev,
       payer_type_id: payerTypeId,
-      // Очищаем специфичные поля при смене типа
+      inn: '', // Сбрасываем ИНН при выборе типа
+      ogrn: '', // Сбрасываем ОГРН при выборе типа
       fio: '',
       full_name: '',
       short_name: '',
-      ogrn: ''
     }));
     setStep(2);
   };
@@ -103,7 +111,7 @@ const WorkerAddTaxpayer = () => {
       return;
     }
 
-    setLoading(true);
+    setLoadingINN(true);
     setError('');
     try {
       const data = await generateINN(formData.payer_type_id);
@@ -111,7 +119,46 @@ const WorkerAddTaxpayer = () => {
     } catch (err) {
       setError(err.response?.data?.error || 'Ошибка генерации ИНН');
     } finally {
-      setLoading(false);
+      setLoadingINN(false);
+    }
+  };
+
+  // НОВАЯ ФУНКЦИЯ: Генерация ОГРН/ОГРНИП
+  const handleGenerateOGRN = async () => {
+    if (!formData.payer_type_id) {
+      setError('Сначала выберите тип плательщика');
+      return;
+    }
+
+    if (formData.payer_type_id == 1) {
+      setError('Физические лица не имеют ОГРН/ОГРНИП');
+      return;
+    }
+
+    if (!formData.region_key) {
+      setError('Выберите регион для генерации ОГРН/ОГРНИП');
+      return;
+    }
+
+    setLoadingOGRN(true);
+    setError('');
+    try {
+      let data;
+      if (formData.payer_type_id == 2) { // ИП
+        data = await generateOGRNIP(formData.region_key);
+      } else if (formData.payer_type_id == 3) { // Юрлицо
+        data = await generateOGRN(formData.region_key);
+      }
+      
+      if (data && data.ogrn) {
+        setFormData(prev => ({ ...prev, ogrn: data.ogrn }));
+      } else {
+        setError('Не удалось сгенерировать ОГРН/ОГРНИП');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Ошибка генерации ОГРН/ОГРНИП');
+    } finally {
+      setLoadingOGRN(false);
     }
   };
 
@@ -147,6 +194,15 @@ const WorkerAddTaxpayer = () => {
         throw new Error('ИНН физического лица или ИП должен состоять из 12 цифр');
       }
 
+      // Проверяем длину ОГРН/ОГРНИП если указано
+      if (formData.ogrn) {
+        if (formData.payer_type_id == 2 && formData.ogrn.length !== 15) {
+          throw new Error('ОГРНИП должен состоять из 15 цифр');
+        } else if (formData.payer_type_id == 3 && formData.ogrn.length !== 13) {
+          throw new Error('ОГРН должен состоять из 13 цифр');
+        }
+      }
+
       const result = await createTaxpayer(formData);
       setGeneratedPassword(result.password);
       setStep(4);
@@ -179,7 +235,7 @@ const WorkerAddTaxpayer = () => {
     setError('');
   };
 
-  // Функции для сброса пароля
+  // Функции для сброса пароля (остаются без изменений)
   const handleStartReset = () => {
     if (!resetINN) {
       setResetError('Введите ИНН налогоплательщика');
@@ -394,7 +450,7 @@ const WorkerAddTaxpayer = () => {
     );
   }
 
-  // Шаг 2: Генерация ИНН
+  // Шаг 2: Ввод/генерация ИНН
   if (step === 2) {
     return (
       <div className="container mt-4">
@@ -402,30 +458,45 @@ const WorkerAddTaxpayer = () => {
           <div className="col-md-8">
             <div className="card">
               <div className="card-header bg-primary text-white">
-                <h4 className="mb-0">Генерация ИНН</h4>
+                <h4 className="mb-0">Ввод ИНН</h4>
               </div>
               <div className="card-body">
                 <div className="mb-4">
-                  <label className="form-label">ИНН</label>
+                  <label className="form-label">ИНН *</label>
                   <div className="input-group">
                     <input
                       type="text"
                       className="form-control"
                       value={formData.inn}
                       onChange={(e) => handleInputChange('inn', e.target.value)}
-                      placeholder="Будет сгенерирован автоматически"
+                      placeholder={
+                        formData.payer_type_id == 3 
+                          ? "Введите 10-значный ИНН или сгенерируйте автоматически" 
+                          : "Введите 12-значный ИНН или сгенерируйте автоматически"
+                      }
+                      maxLength={formData.payer_type_id == 3 ? 10 : 12}
                     />
                     <button
                       type="button"
                       className="btn btn-outline-primary"
                       onClick={handleGenerateINN}
-                      disabled={loading}
+                      disabled={loadingINN}
                     >
-                      {loading ? 'Генерация...' : 'Сгенерировать ИНН'}
+                      {loadingINN ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2"></span>
+                          Генерация...
+                        </>
+                      ) : (
+                        'Сгенерировать'
+                      )}
                     </button>
                   </div>
                   <div className="form-text">
-                    ИНН будет сгенерирован автоматически в соответствии с выбранным типом плательщика
+                    {formData.payer_type_id == 3 
+                      ? "Вы можете ввести 10-значный ИНН вручную или сгенерировать автоматически"
+                      : "Вы можете ввести 12-значный ИНН вручную или сгенерировать автоматически"
+                    }
                   </div>
                 </div>
 
@@ -433,7 +504,10 @@ const WorkerAddTaxpayer = () => {
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => setStep(1)}
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, inn: '' })); // Сбрасываем ИНН
+                      setStep(1);
+                    }}
                   >
                     Назад
                   </button>
@@ -457,6 +531,10 @@ const WorkerAddTaxpayer = () => {
 
   // Шаг 3: Основная информация
   if (step === 3) {
+    const isIndividual = formData.payer_type_id == 1;
+    const isIP = formData.payer_type_id == 2;
+    const isLegalEntity = formData.payer_type_id == 3;
+
     return (
       <div className="container mt-4">
         <div className="row justify-content-center">
@@ -484,6 +562,12 @@ const WorkerAddTaxpayer = () => {
                         value={formData.inn}
                         readOnly
                       />
+                      <div className="form-text">
+                        {isLegalEntity 
+                          ? "10-значный ИНН юридического лица"
+                          : "12-значный ИНН физического лица/ИП"
+                        }
+                      </div>
                     </div>
                     <div className="col-md-6">
                       <label className="form-label">Тип плательщика</label>
@@ -497,7 +581,7 @@ const WorkerAddTaxpayer = () => {
                   </div>
 
                   {/* Поля для физлица */}
-                  {formData.payer_type_id == 1 && (
+                  {isIndividual && (
                     <>
                       <div className="row mb-3">
                         <div className="col-md-12">
@@ -508,6 +592,7 @@ const WorkerAddTaxpayer = () => {
                             value={formData.fio}
                             onChange={(e) => handleInputChange('fio', e.target.value)}
                             required
+                            placeholder="Фамилия Имя Отчество"
                           />
                         </div>
                       </div>
@@ -526,7 +611,7 @@ const WorkerAddTaxpayer = () => {
                   )}
 
                   {/* Поля для ИП и Юрлиц */}
-                  {(formData.payer_type_id == 2 || formData.payer_type_id == 3) && (
+                  {(isIP || isLegalEntity) && (
                     <>
                       <div className="row mb-3">
                         <div className="col-md-12">
@@ -537,6 +622,7 @@ const WorkerAddTaxpayer = () => {
                             value={formData.full_name}
                             onChange={(e) => handleInputChange('full_name', e.target.value)}
                             required
+                            placeholder="Полное официальное наименование"
                           />
                         </div>
                       </div>
@@ -548,16 +634,44 @@ const WorkerAddTaxpayer = () => {
                             className="form-control"
                             value={formData.short_name}
                             onChange={(e) => handleInputChange('short_name', e.target.value)}
+                            placeholder="Краткое наименование (если есть)"
                           />
                         </div>
                         <div className="col-md-6">
-                          <label className="form-label">ОГРН</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            value={formData.ogrn}
-                            onChange={(e) => handleInputChange('ogrn', e.target.value)}
-                          />
+                          <label className="form-label">
+                            {isIP ? 'ОГРНИП' : 'ОГРН'}
+                          </label>
+                          <div className="input-group">
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={formData.ogrn}
+                              onChange={(e) => handleInputChange('ogrn', e.target.value)}
+                              placeholder={isIP ? "15 цифр" : "13 цифр"}
+                              maxLength={isIP ? 15 : 13}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-outline-secondary"
+                              onClick={handleGenerateOGRN}
+                              disabled={loadingOGRN || !formData.region_key}
+                            >
+                              {loadingOGRN ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-2"></span>
+                                  Генерация...
+                                </>
+                              ) : (
+                                'Сгенерировать'
+                              )}
+                            </button>
+                          </div>
+                          <div className="form-text">
+                            {isIP 
+                              ? "Вы можете ввести 15-значный ОГРНИП вручную или сгенерировать автоматически"
+                              : "Вы можете ввести 13-значный ОГРН вручную или сгенерировать автоматически"
+                            }
+                          </div>
                         </div>
                       </div>
                       <div className="row mb-3">
@@ -577,6 +691,7 @@ const WorkerAddTaxpayer = () => {
                             className="form-control"
                             value={formData.executive_list}
                             onChange={(e) => handleInputChange('executive_list', e.target.value)}
+                            placeholder="ФИО руководителя(ей)"
                           />
                         </div>
                       </div>
@@ -592,6 +707,7 @@ const WorkerAddTaxpayer = () => {
                         rows="2"
                         value={formData.registration_address}
                         onChange={(e) => handleInputChange('registration_address', e.target.value)}
+                        placeholder="Юридический/регистрационный адрес"
                       />
                     </div>
                     <div className="col-md-6">
@@ -601,6 +717,7 @@ const WorkerAddTaxpayer = () => {
                         rows="2"
                         value={formData.fact_address}
                         onChange={(e) => handleInputChange('fact_address', e.target.value)}
+                        placeholder="Фактический адрес (если отличается от регистрационного)"
                       />
                     </div>
                   </div>
@@ -621,19 +738,34 @@ const WorkerAddTaxpayer = () => {
                       </select>
                     </div>
                     <div className="col-md-6">
-                      <label className="form-label">Регион</label>
+                      <label className="form-label">Регион *</label>
                       <select
                         className="form-select"
                         value={formData.region_key}
                         onChange={(e) => handleInputChange('region_key', parseInt(e.target.value))}
+                        required
                       >
                         {regions.map(region => (
                           <option key={region.region_id} value={region.region_id}>
-                            {region.name}
+                            {region.name} ({region.code})
                           </option>
                         ))}
                       </select>
+                      <div className="form-text">
+                        Выбор региона влияет на генерацию ОГРН/ОГРНИП
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="form-label">Банковские реквизиты</label>
+                    <textarea
+                      className="form-control"
+                      rows="2"
+                      value={formData.bank_detals}
+                      onChange={(e) => handleInputChange('bank_detals', e.target.value)}
+                      placeholder="Расчетный счет, БИК, банк"
+                    />
                   </div>
 
                   <div className="d-flex justify-content-between">
@@ -649,7 +781,14 @@ const WorkerAddTaxpayer = () => {
                       className="btn btn-success"
                       disabled={loading}
                     >
-                      {loading ? 'Создание...' : 'Создать налогоплательщика'}
+                      {loading ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2"></span>
+                          Создание...
+                        </>
+                      ) : (
+                        'Создать налогоплательщика'
+                      )}
                     </button>
                   </div>
                 </form>

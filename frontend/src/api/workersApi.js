@@ -369,3 +369,19 @@ export const updateTaxableObject = async (objectId, objectData) => {
     throw error;
   }
 };
+
+// Генерация ОГРН для юридических лиц
+export const generateOGRN = async (regionKey) => {
+  const { data } = await axiosInstance.post('/worker/generate-ogrn/', {
+    region_key: regionKey
+  });
+  return data;
+};
+
+// Генерация ОГРНИП для ИП
+export const generateOGRNIP = async (regionKey) => {
+  const { data } = await axiosInstance.post('/worker/generate-ogrnip/', {
+    region_key: regionKey
+  });
+  return data;
+};
