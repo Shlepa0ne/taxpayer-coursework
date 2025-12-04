@@ -1,4 +1,3 @@
-// frontend/src/pages/worker/components/InspectionDetailModal.jsx
 import { useState, useEffect } from 'react';
 import { 
   getInspectionDetail,
@@ -10,7 +9,7 @@ import {
   deleteViolation,
   updateInspection,
   updateInspectionStatus,
-  cancelInspection // НОВЫЙ ИМПОРТ
+  cancelInspection
 } from '../../../api/workersApi';
 import Spinner from '../../../components/ui/Spinner';
 
@@ -54,12 +53,10 @@ const InspectionDetailModal = ({
       const data = await getInspectionDetail(inspection.inspection_id);
       setInspectionDetail(data);
       
-      // Загружаем нарушения, типы нарушений и периоды
       await fetchViolations();
       await fetchViolationTypes();
       await fetchTaxPeriods();
 
-      // Заполняем форму данными проверки
       setInspectionForm({
         inspection_date: data.inspection_date ? new Date(data.inspection_date).toISOString().slice(0, 16) : '',
         inspection_type_id: data.inspection_type_id,
@@ -77,7 +74,6 @@ const InspectionDetailModal = ({
   const fetchViolations = async () => {
     try {
       const data = await getInspectionViolations(inspection.inspection_id);
-      console.log('Fetched violations:', data); // Для отладки
       setViolations(data);
     } catch (error) {
       console.error('Error fetching violations:', error);
@@ -105,24 +101,20 @@ const InspectionDetailModal = ({
 
   const canAddViolations = () => {
     if (!inspectionDetail) return false;
-    
-    // Можно добавлять нарушения только когда проверка "В процессе" (статус 2)
-    return inspectionDetail.inspection_type_status_id === 2;
+    // Можно добавлять нарушения только когда проверка "В процессе" (статус 1)
+    return inspectionDetail.inspection_type_status_id === 1;
   };
 
   const canEditInspection = () => {
     if (!inspectionDetail || !isSeniorOrManager) return false;
-    
-    // Можно редактировать только запланированные проверки (статус 1)
-    return inspectionDetail.inspection_type_status_id === 1;
+    // Можно редактировать только запланированные проверки (статус 4)
+    return inspectionDetail.inspection_type_status_id === 4;
   };
 
   const handleUpdateInspection = async (e) => {
     e.preventDefault();
     try {
-      // Убираем inspection_type_status_id из данных формы
-      const { inspection_type_status_id, ...formDataToSend } = inspectionForm;
-      await updateInspection(inspectionDetail.inspection_id, formDataToSend);
+      await updateInspection(inspectionDetail.inspection_id, inspectionForm);
       setEditMode(false);
       await fetchInspectionDetail();
       onUpdate();
@@ -136,7 +128,7 @@ const InspectionDetailModal = ({
   const handleUpdateStatus = async (newStatusId) => {
     try {
       // Для отмены используем отдельный endpoint
-      if (newStatusId === 4) {
+      if (newStatusId === 3) { // Отменена
         if (!window.confirm('Вы уверены, что хотите отменить проверку?')) {
           return;
         }
@@ -169,24 +161,13 @@ const InspectionDetailModal = ({
   const handleAddViolation = async (e) => {
     e.preventDefault();
     try {
-      console.log('Adding violation with data:', {
-        inspection_id: inspectionDetail.inspection_id,
-        ...violationForm
-      });
-      
       await createViolation({
         inspection_id: inspectionDetail.inspection_id,
         ...violationForm
       });
-      
       setViolationForm({ violation_type_id: '', sum_to_pay: '', period_id: '' });
       setShowAddViolation(false);
-      
-      // Даем время бэкенду обработать запрос
-      setTimeout(async () => {
-        await fetchViolations();
-      }, 100);
-      
+      await fetchViolations();
       alert('Нарушение успешно добавлено!');
     } catch (error) {
       console.error('Error adding violation:', error);
@@ -240,10 +221,10 @@ const InspectionDetailModal = ({
 
   const getInspectionStatus = (statusId) => {
     const statusMap = {
-      1: { text: 'Запланирована', color: 'warning' },
-      2: { text: 'В процессе', color: 'info' },
-      3: { text: 'Завершена', color: 'success' },
-      4: { text: 'Отменена', color: 'danger' }
+      1: { text: 'В процессе', color: 'info' },
+      2: { text: 'Завершена', color: 'success' },
+      3: { text: 'Отменена', color: 'danger' },
+      4: { text: 'Запланирована', color: 'warning' }
     };
     return statusMap[statusId] || { text: 'Неизвестно', color: 'secondary' };
   };
@@ -254,13 +235,13 @@ const InspectionDetailModal = ({
     const statusId = inspectionDetail.inspection_type_status_id;
     
     switch(statusId) {
-      case 1: // Запланирована
+      case 4: // Запланирована
         return 'Нарушения можно добавлять только во время проверки (после её начала)';
-      case 2: // В процессе
+      case 1: // В процессе
         return 'Нарушения можно добавлять во время проверки';
-      case 3: // Завершена
+      case 2: // Завершена
         return 'Проверка завершена, добавление нарушений невозможно';
-      case 4: // Отменена
+      case 3: // Отменена
         return 'Проверка отменена, добавление нарушений невозможно';
       default:
         return 'Добавление нарушений невозможно';
@@ -336,29 +317,28 @@ const InspectionDetailModal = ({
                   )}
                   
                   {/* КНОПКИ СМЕНЫ СТАТУСА */}
-                  {inspectionDetail.inspection_type_status_id === 1 && (
-                    <button 
-                      className="btn btn-outline-info"
-                      onClick={() => handleUpdateStatus(2)}
-                    >
-                      Начать проверку
-                    </button>
+                  {inspectionDetail.inspection_type_status_id === 4 && ( // Запланирована
+                    <>
+                      <button 
+                        className="btn btn-outline-info"
+                        onClick={() => handleUpdateStatus(1)} // Начать проверку -> В процессе
+                      >
+                        Начать проверку
+                      </button>
+                      <button 
+                        className="btn btn-outline-danger"
+                        onClick={() => handleUpdateStatus(3)} // Отменить проверку
+                      >
+                        Отменить проверку
+                      </button>
+                    </>
                   )}
-                  {inspectionDetail.inspection_type_status_id === 2 && (
+                  {inspectionDetail.inspection_type_status_id === 1 && ( // В процессе
                     <button 
                       className="btn btn-outline-success"
-                      onClick={() => handleUpdateStatus(3)}
+                      onClick={() => handleUpdateStatus(2)} // Завершить проверку
                     >
                       Завершить проверку
-                    </button>
-                  )}
-                  {/* ОТМЕНА ТОЛЬКО ДЛЯ ЗАПЛАНИРОВАННЫХ */}
-                  {inspectionDetail.inspection_type_status_id === 1 && (
-                    <button 
-                      className="btn btn-outline-danger"
-                      onClick={() => handleUpdateStatus(4)}
-                    >
-                      Отменить проверку
                     </button>
                   )}
                 </div>
@@ -370,7 +350,6 @@ const InspectionDetailModal = ({
                 <h6>Основная информация</h6>
                 
                 {editMode ? (
-                  // ФОРМА РЕДАКТИРОВАНИЯ
                   <form onSubmit={handleUpdateInspection}>
                     <div className="mb-3">
                       <label className="form-label">Дата и время проверки *</label>
@@ -449,7 +428,6 @@ const InspectionDetailModal = ({
                     </div>
                   </form>
                 ) : (
-                  // ОТОБРАЖЕНИЕ ИНФОРМАЦИИ
                   <>
                     <p><strong>Дата и время:</strong> {new Date(inspectionDetail.inspection_date).toLocaleString('ru-RU', {
                       year: 'numeric',
@@ -634,8 +612,8 @@ const InspectionDetailModal = ({
                 {/* СООБЩЕНИЕ О ВОЗМОЖНОСТИ ДОБАВЛЕНИЯ НАРУШЕНИЙ */}
                 {!canAddViolationsFlag && (
                   <div className={`alert ${
-                    inspectionDetail.inspection_type_status_id === 1 ? 'alert-warning' : 
-                    inspectionDetail.inspection_type_status_id === 2 ? 'alert-info' : 'alert-secondary'
+                    inspectionDetail.inspection_type_status_id === 4 ? 'alert-warning' : 
+                    inspectionDetail.inspection_type_status_id === 1 ? 'alert-info' : 'alert-secondary'
                   } mt-3`}>
                     <i className="bi bi-info-circle me-2"></i>
                     {getViolationMessage()}

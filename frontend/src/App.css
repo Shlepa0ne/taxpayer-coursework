@@ -50,3 +50,30 @@
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
 }
+
+/* Стили для отображения ошибок в модальных окнах */
+.modal-content {
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-body {
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+/* Стили для алертов с ошибками */
+.alert {
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Стили для сообщений об ошибках в формах */
+.error-message {
+  color: #dc3545;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  display: block;
+}

@@ -555,17 +555,19 @@ const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection, is
 
   const getInspectionStatusText = (statusId) => {
     const statuses = {
-      1: 'Запланирована',
+      1: 'В процессе',
       2: 'Завершена',
-      3: 'Отменена'
+      3: 'Отменена',
+      4: "Запланирована"
     };
     return statuses[statusId] || 'Неизвестно';
   };
 
   const getInspectionStatusColor = (statusId) => {
-    if (statusId === 1) return 'warning';
+    if (statusId === 1) return 'info';
     if (statusId === 2) return 'success';
     if (statusId === 3) return 'secondary';
+    if (statusId === 4) return 'warning'
     return 'secondary';
   };
 

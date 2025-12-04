@@ -23,6 +23,8 @@ const WorkerInspections = () => {
   const [myPage, setMyPage] = useState(1); // страница для "мои проверки"
   const [allPage, setAllPage] = useState(1); // страница для "все проверки"
   const queryClient = useQueryClient();
+  const [formErrors, setFormErrors] = useState({});
+  const [dateError, setDateError] = useState('');
 
   // Получаем информацию о текущем сотруднике
   const { data: workerData } = useQuery({
@@ -105,7 +107,13 @@ const WorkerInspections = () => {
     onError: (error) => {
       console.error('Error creating inspection:', error);
       const errorMessage = error.response?.data?.error || error.message || 'Неизвестная ошибка';
-      alert('Ошибка при создании проверки: ' + errorMessage);
+      // Форматируем ошибку для лучшего отображения
+      let formattedError = errorMessage;
+      // Если ошибка содержит точки, разбиваем на строки
+      if (errorMessage.includes('.')) {
+        formattedError = errorMessage.split('.').filter(msg => msg.trim()).join('.\n');
+      }
+      alert('Ошибка при создании проверки:\n\n' + formattedError);
     }
   });
 
@@ -135,7 +143,44 @@ const WorkerInspections = () => {
     }
   };
 
-  const validateForm = () => {
+   // Функция валидации даты
+  const validateInspectionDate = (dateString) => {
+    if (!dateString) {
+      setDateError('Укажите дату проверки');
+      return false;
+    }
+    
+    const selectedDate = new Date(dateString);
+    const today = new Date();
+    
+    // Сбрасываем ошибки
+    setDateError('');
+    
+    // Проверка года
+    if (selectedDate.getFullYear() < 2000 || selectedDate.getFullYear() > 2100) {
+      setDateError('Год должен быть между 2000 и 2100');
+      return false;
+    }
+    
+    // Проверка, что дата не в прошлом
+    if (selectedDate < today) {
+      setDateError('Дата проверки не может быть в прошлом');
+      return false;
+    }
+    
+    // Проверка, что дата не более чем на год вперед
+    const maxDate = new Date();
+    maxDate.setFullYear(today.getFullYear() + 1);
+    
+    if (selectedDate > maxDate) {
+      setDateError('Дата проверки не может быть более чем на год вперед');
+      return false;
+    }
+    
+    return true;
+  };
+
+   const validateForm = () => {
     const errors = [];
 
     if (!formData.taxpayer_inn) {
@@ -147,7 +192,6 @@ const WorkerInspections = () => {
     } else {
       const selectedDate = new Date(formData.inspection_date);
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
       
       // Проверяем, что дата не в прошлом
       if (selectedDate < today) {
@@ -157,10 +201,14 @@ const WorkerInspections = () => {
       // Проверяем, что дата не более чем на год вперед
       const maxDate = new Date();
       maxDate.setFullYear(today.getFullYear() + 1);
-      maxDate.setHours(23, 59, 59, 999);
       
       if (selectedDate > maxDate) {
         errors.push('Дата проверки не может быть более чем на год вперед');
+      }
+      
+      // Проверяем корректность года
+      if (selectedDate.getFullYear() < 2000 || selectedDate.getFullYear() > 2100) {
+        errors.push('Год должен быть между 2000 и 2100');
       }
     }
 
@@ -176,8 +224,12 @@ const WorkerInspections = () => {
     
     const validationErrors = validateForm();
     if (validationErrors.length > 0) {
-      // Показываем все ошибки в одном сообщении
-      alert(validationErrors.join('\n'));
+      // Показываем все ошибки в отдельном модальном окне или алерте с переносами строк
+      let errorMessage = 'Ошибки при заполнении формы:\n\n';
+      validationErrors.forEach((error, index) => {
+        errorMessage += `${index + 1}. ${error}\n`;
+      });
+      alert(errorMessage);
       return;
     }
 
@@ -231,10 +283,10 @@ const WorkerInspections = () => {
 
   const getInspectionStatus = (statusId) => {
     const statusMap = {
-      1: { text: 'Запланирована', color: 'warning' },
-      2: { text: 'В процессе', color: 'info' },
-      3: { text: 'Завершена', color: 'success' },
-      4: { text: 'Отменена', color: 'danger' }
+      1: { text: 'В процессе', color: 'info' },
+      2: { text: 'Завершена', color: 'success' },
+      3: { text: 'Отменена', color: 'danger' },
+      4: { text: 'Запланирована', color: 'warning' }
     };
     return statusMap[statusId] || { text: 'Неизвестно', color: 'secondary' };
   };
@@ -558,16 +610,32 @@ const WorkerInspections = () => {
                         <label className="form-label">Дата и время проверки *</label>
                         <input
                           type="datetime-local"
-                          className="form-control"
+                          className={`form-control ${dateError ? 'is-invalid' : ''}`}
                           value={formData.inspection_date}
-                          onChange={(e) => setFormData({...formData, inspection_date: e.target.value})}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setFormData({...formData, inspection_date: value});
+                            validateInspectionDate(value);
+                          }}
                           min={new Date().toISOString().slice(0, 16)}
+                          max={(() => {
+                            const maxDate = new Date();
+                            maxDate.setFullYear(maxDate.getFullYear() + 1);
+                            return maxDate.toISOString().slice(0, 16);
+                          })()}
                           required
                           disabled={createInspectionMutation.isLoading}
                         />
-                        <small className="text-muted">
-                          Выберите дату и время будущей проверки
-                        </small>
+                        {dateError && (
+                          <div className="invalid-feedback">
+                            {dateError}
+                          </div>
+                        )}
+                        {!dateError && (
+                          <small className="text-muted">
+                            Выберите дату и время будущей проверки (не более чем на год вперед)
+                          </small>
+                        )}
                       </div>
                     </div>
                   </div>
