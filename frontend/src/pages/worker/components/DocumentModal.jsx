@@ -1,4 +1,3 @@
-// frontend/src/pages/worker/components/DocumentModal.jsx
 import React, { useState, useEffect } from 'react';
 import { createDocument, updateDocument, getDocumentTypes } from '../../../api/workersApi';
 
@@ -13,8 +12,11 @@ const DocumentModal = ({ document, taxpayerId, onClose, onSave }) => {
     expire_date: '',
     additional_info: ''
   });
+  
   const [documentTypes, setDocumentTypes] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [issuedDateError, setIssuedDateError] = useState('');
+  const [expireDateError, setExpireDateError] = useState('');
 
   useEffect(() => {
     // Заменяем заглушку на реальный вызов API
@@ -49,9 +51,81 @@ const DocumentModal = ({ document, taxpayerId, onClose, onSave }) => {
     }
   }, [document]);
 
+  // Валидация даты выдачи
+  const validateIssuedDate = (dateString) => {
+    if (!dateString) {
+      setIssuedDateError('');
+      return true;
+    }
+    
+    const issuedDate = new Date(dateString);
+    const currentYear = new Date().getFullYear();
+    const issuedYear = issuedDate.getFullYear();
+    
+    // Проверка года (1900 - текущий год)
+    if (issuedYear < 1900 || issuedYear > currentYear) {
+      setIssuedDateError(`Год должен быть между 1900 и ${currentYear}`);
+      return false;
+    }
+    
+    // Проверка, что дата не в будущем
+    if (issuedDate > new Date()) {
+      setIssuedDateError('Дата выдачи не может быть в будущем');
+      return false;
+    }
+    
+    setIssuedDateError('');
+    
+    // Если есть дата действия, перепроверяем ее
+    if (formData.expire_date) {
+      validateExpireDate(formData.expire_date, dateString);
+    }
+    
+    return true;
+  };
+
+  // Валидация даты действия
+  const validateExpireDate = (expireDateString, issuedDateString = null) => {
+    if (!expireDateString) {
+      setExpireDateError('');
+      return true;
+    }
+    
+    const expireDate = new Date(expireDateString);
+    const issuedDate = issuedDateString ? new Date(issuedDateString) : new Date(formData.issued_date);
+    const currentYear = new Date().getFullYear();
+    const expireYear = expireDate.getFullYear();
+    
+    // Проверка года (не позднее 2100 года)
+    if (expireYear > 2100) {
+      setExpireDateError('Год не может быть позже 2100');
+      return false;
+    }
+    
+    // Проверка, что дата действия больше даты выдачи
+    if (formData.issued_date && expireDate <= issuedDate) {
+      setExpireDateError('Дата действия должна быть позже даты выдачи');
+      return false;
+    }
+    
+    setExpireDateError('');
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+
+    // Валидация перед отправкой
+    if (formData.issued_date && !validateIssuedDate(formData.issued_date)) {
+      setLoading(false);
+      return;
+    }
+    
+    if (formData.expire_date && !validateExpireDate(formData.expire_date)) {
+      setLoading(false);
+      return;
+    }
 
     try {
       // Подготавливаем данные для отправки
@@ -81,7 +155,15 @@ const DocumentModal = ({ document, taxpayerId, onClose, onSave }) => {
   };
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    const newFormData = { ...formData, [field]: value };
+    setFormData(newFormData);
+    
+    // Валидация при изменении дат
+    if (field === 'issued_date') {
+      validateIssuedDate(value);
+    } else if (field === 'expire_date') {
+      validateExpireDate(value);
+    }
   };
 
   return (
@@ -155,10 +237,16 @@ const DocumentModal = ({ document, taxpayerId, onClose, onSave }) => {
                     <label className="form-label">Дата выдачи</label>
                     <input
                       type="date"
-                      className="form-control"
+                      className={`form-control ${issuedDateError ? 'is-invalid' : ''}`}
                       value={formData.issued_date}
                       onChange={(e) => handleChange('issued_date', e.target.value)}
+                      max={new Date().toISOString().split('T')[0]}
                     />
+                    {issuedDateError && (
+                      <div className="invalid-feedback">
+                        {issuedDateError}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="col-md-6">
@@ -166,10 +254,17 @@ const DocumentModal = ({ document, taxpayerId, onClose, onSave }) => {
                     <label className="form-label">Действителен до</label>
                     <input
                       type="date"
-                      className="form-control"
+                      className={`form-control ${expireDateError ? 'is-invalid' : ''}`}
                       value={formData.expire_date}
                       onChange={(e) => handleChange('expire_date', e.target.value)}
+                      min={formData.issued_date || undefined}
+                      max="2100-12-31"
                     />
+                    {expireDateError && (
+                      <div className="invalid-feedback">
+                        {expireDateError}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

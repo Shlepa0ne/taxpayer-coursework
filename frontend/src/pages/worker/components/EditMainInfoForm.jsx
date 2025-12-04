@@ -5,9 +5,7 @@ const EditMainInfoForm = ({ data, onChange, onSave, onCancel, taxpayerType, curr
   const [taxRegimes, setTaxRegimes] = useState([]);
   const [payerStatuses, setPayerStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // УДАЛИТЬ локальное состояние formData и использовать напрямую data из props
-  // const [formData, setFormData] = useState({...});
+  const [birthDateError, setBirthDateError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,8 +36,40 @@ const EditMainInfoForm = ({ data, onChange, onSave, onCancel, taxpayerType, curr
     fetchData();
   }, []);
 
+  // Валидация даты рождения
+  const validateBirthDate = (dateString) => {
+    if (!dateString) {
+      setBirthDateError('');
+      return true;
+    }
+    
+    const selectedDate = new Date(dateString);
+    const currentYear = new Date().getFullYear();
+    const selectedYear = selectedDate.getFullYear();
+    
+    // Проверка года
+    if (selectedYear < 1900 || selectedYear > currentYear) {
+      setBirthDateError(`Год должен быть между 1900 и ${currentYear}`);
+      return false;
+    }
+    
+    // Проверка, что дата не в будущем
+    if (selectedDate > new Date()) {
+      setBirthDateError('Дата не может быть в будущем');
+      return false;
+    }
+    
+    setBirthDateError('');
+    return true;
+  };
+
   // Используем useCallback для стабильной функции
   const handleChange = React.useCallback((field, value) => {
+    // Если это поле даты рождения - валидируем
+    if (field === 'birth_date') {
+      validateBirthDate(value);
+    }
+    
     // Вместо обновления локального состояния, сразу вызываем onChange
     const updatedData = { 
       ...data, 
@@ -69,6 +99,12 @@ const EditMainInfoForm = ({ data, onChange, onSave, onCancel, taxpayerType, curr
 
   const handleSave = React.useCallback(() => {
     console.log('Saving form data:', data);
+    
+    // Дополнительная валидация перед сохранением
+    if (data.birth_date && !validateBirthDate(data.birth_date)) {
+      alert('Пожалуйста, исправьте ошибки в дате рождения');
+      return;
+    }
     
     // Проверяем обязательные поля перед сохранением
     if (!data.tax_regime_id || !data.payer_status_id) {
@@ -141,10 +177,16 @@ const EditMainInfoForm = ({ data, onChange, onSave, onCancel, taxpayerType, curr
           <label className="form-label">Дата рождения/регистрации</label>
           <input
             type="date"
-            className="form-control"
+            className={`form-control ${birthDateError ? 'is-invalid' : ''}`}
             value={data.birth_date || ''}
             onChange={(e) => handleChange('birth_date', e.target.value)}
+            max={new Date().toISOString().split('T')[0]}
           />
+          {birthDateError && (
+            <div className="invalid-feedback">
+              {birthDateError}
+            </div>
+          )}
         </div>
 
         <div className="mb-3">

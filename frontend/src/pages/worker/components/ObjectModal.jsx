@@ -23,6 +23,8 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   const [realEstateTypes, setRealEstateTypes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingTypes, setLoadingTypes] = useState(true);
+  const [ownershipStartError, setOwnershipStartError] = useState('');
+  const [ownershipEndError, setOwnershipEndError] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
@@ -59,7 +61,7 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
           console.log('Object type ID:', objectTypeId);
           console.log('Real estate type ID:', realEstateTypeId);
           
-          setFormData({
+          const newFormData = {
             object_type: objectTypeId || '',
             object_name: object.object_name || '',
             object_address: object.object_address || '',
@@ -73,7 +75,13 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
             real_estate_type: realEstateTypeId || null,
             ownership_start_date: object.ownership?.ownership_start_date || '',
             ownership_end_date: object.ownership?.ownership_end_date || ''
-          });
+          };
+          
+          setFormData(newFormData);
+          
+          // Валидируем существующие даты при загрузке
+          validateOwnershipStartDate(newFormData.ownership_start_date);
+          validateOwnershipEndDate(newFormData.ownership_end_date, newFormData.ownership_start_date);
         }
       } catch (error) {
         console.error('Ошибка загрузки типов объектов:', error);
@@ -92,9 +100,89 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
     loadData();
   }, [object]);
 
+  // Валидация даты начала владения
+  const validateOwnershipStartDate = (dateString) => {
+    if (!dateString) {
+      setOwnershipStartError('');
+      return true;
+    }
+    
+    const startDate = new Date(dateString);
+    const currentDate = new Date();
+    const startYear = startDate.getFullYear();
+    
+    // Проверка года (не раньше 1900 года)
+    if (startYear < 1900) {
+      setOwnershipStartError('Год должен быть не раньше 1900');
+      return false;
+    }
+    
+    // Проверка, что дата не в будущем
+    if (startDate > currentDate) {
+      setOwnershipStartError('Дата начала не может быть в будущем');
+      return false;
+    }
+    
+    setOwnershipStartError('');
+    
+    // Если есть дата окончания, перепроверяем ее
+    if (formData.ownership_end_date) {
+      validateOwnershipEndDate(formData.ownership_end_date, dateString);
+    }
+    
+    return true;
+  };
+
+  // Валидация даты окончания владения
+  const validateOwnershipEndDate = (endDateString, startDateString = null) => {
+    if (!endDateString) {
+      setOwnershipEndError('');
+      return true;
+    }
+    
+    const endDate = new Date(endDateString);
+    const startDate = startDateString ? new Date(startDateString) : new Date(formData.ownership_start_date);
+    const currentDate = new Date();
+    const endYear = endDate.getFullYear();
+    
+    // Проверка, что дата не в будущем
+    if (endDate > currentDate) {
+      setOwnershipEndError('Дата окончания не может быть в будущем');
+      return false;
+    }
+    
+    // Проверка, что дата окончания позже даты начала
+    if (formData.ownership_start_date && endDate <= startDate) {
+      setOwnershipEndError('Дата окончания должна быть позже даты начала');
+      return false;
+    }
+    
+    setOwnershipEndError('');
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+
+    // Валидация перед отправкой
+    let hasErrors = false;
+    
+    if (!formData.ownership_start_date) {
+      setOwnershipStartError('Укажите дату начала владения');
+      hasErrors = true;
+    } else if (!validateOwnershipStartDate(formData.ownership_start_date)) {
+      hasErrors = true;
+    }
+    
+    if (formData.ownership_end_date && !validateOwnershipEndDate(formData.ownership_end_date)) {
+      hasErrors = true;
+    }
+    
+    if (hasErrors) {
+      setLoading(false);
+      return;
+    }
 
     try {
       console.log('Submitting object data:', formData);
@@ -143,7 +231,15 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   };
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    const newFormData = { ...formData, [field]: value };
+    setFormData(newFormData);
+    
+    // Валидация при изменении дат владения
+    if (field === 'ownership_start_date') {
+      validateOwnershipStartDate(value);
+    } else if (field === 'ownership_end_date') {
+      validateOwnershipEndDate(value);
+    }
   };
 
   // Функция для определения, какие поля показывать в зависимости от типа объекта
@@ -178,6 +274,9 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
   };
 
   const { showCadastralFields, showTransportFields, showExtraValue, showRealEstateType, showObjectAddress } = getVisibleFields();
+
+  // Максимальная дата для полей владения - текущая дата
+  const maxDate = new Date().toISOString().split('T')[0];
 
   return (
       <div className="modal-dialog modal-lg">
@@ -388,11 +487,17 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
                     <label className="form-label">Дата начала владения *</label>
                     <input
                       type="date"
-                      className="form-control"
+                      className={`form-control ${ownershipStartError ? 'is-invalid' : ''}`}
                       value={formData.ownership_start_date}
                       onChange={(e) => handleChange('ownership_start_date', e.target.value)}
+                      max={maxDate}
                       required
                     />
+                    {ownershipStartError && (
+                      <div className="invalid-feedback">
+                        {ownershipStartError}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="col-md-6">
@@ -400,11 +505,20 @@ const ObjectModal = ({ object, taxpayerId, onClose, onSave }) => {
                     <label className="form-label">Дата окончания владения</label>
                     <input
                       type="date"
-                      className="form-control"
+                      className={`form-control ${ownershipEndError ? 'is-invalid' : ''}`}
                       value={formData.ownership_end_date}
                       onChange={(e) => handleChange('ownership_end_date', e.target.value)}
+                      min={formData.ownership_start_date || undefined}
+                      max={maxDate}
                     />
-                    <div className="form-text">Оставьте пустым, если владение продолжается</div>
+                    {ownershipEndError && (
+                      <div className="invalid-feedback">
+                        {ownershipEndError}
+                      </div>
+                    )}
+                    <div className="form-text">
+                      Оставьте пустым, если владение продолжается<br/>
+                    </div>
                   </div>
                 </div>
               </div>
