@@ -553,12 +553,13 @@ const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection, is
     return reasons[reasonId] || 'Неизвестно';
   };
 
+  
   const getInspectionStatusText = (statusId) => {
     const statuses = {
       1: 'В процессе',
       2: 'Завершена',
       3: 'Отменена',
-      4: "Запланирована"
+      4: 'Запланирована'
     };
     return statuses[statusId] || 'Неизвестно';
   };
@@ -567,23 +568,34 @@ const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection, is
     if (statusId === 1) return 'info';
     if (statusId === 2) return 'success';
     if (statusId === 3) return 'secondary';
-    if (statusId === 4) return 'warning'
+    if (statusId === 4) return 'warning';
     return 'secondary';
   };
 
-  const isFutureInspection = (inspectionDate) => {
+  const isFutureInspection = (inspectionDate, statusId) => {
     if (!inspectionDate) return false;
     const date = new Date(inspectionDate);
     const today = new Date();
+    // Для статуса "Запланирована" (4) всегда считаем будущей
+    if (statusId === 4) return date > today;
+    // Для других статусов проверяем дату
     return date > today;
   };
 
   // Разделяем проверки на будущие и прошедшие
-  const futureInspections = inspections.filter(inspection => 
-    isFutureInspection(inspection.inspection_date) && inspection.inspection_type_status_id === 1
-  );
+  const futureInspections = inspections.filter(inspection => {
+    if (inspection.inspection_type_status_id === 4) {
+      // Запланированные проверки - всегда будущие
+      return new Date(inspection.inspection_date) > new Date();
+    }
+    if (inspection.inspection_type_status_id === 1) {
+      // Проверки в процессе - если дата в будущем
+      return new Date(inspection.inspection_date) > new Date();
+    }
+    return false;
+  });
   const pastInspections = inspections.filter(inspection => 
-    !isFutureInspection(inspection.inspection_date) || inspection.inspection_type_status_id !== 1
+    !futureInspections.includes(inspection)
   );
 
   return (
@@ -634,7 +646,7 @@ const InspectionsTab = ({ inspections, onInspectionClick, canClickInspection, is
         <div>
           <h5 className="text-muted mb-3">
             <i className="bi bi-check-circle me-2"></i>
-            Завершенные проверки ({pastInspections.length})
+            Завершенные и отмененные проверки ({pastInspections.length})
           </h5>
           <div className="table-responsive">
             <table className="table table-striped table-hover">
