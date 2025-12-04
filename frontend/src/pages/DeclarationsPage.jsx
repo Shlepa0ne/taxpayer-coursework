@@ -1,13 +1,26 @@
 // frontend/src/pages/DeclarationsPage.jsx
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import DeclarationForm from '../features/declarations/DeclarationForm';
 import DeclarationList from '../features/declarations/DeclarationList';
 import { getMyDeclarations } from '../api/taxpayersApi';
 import Spinner from '../components/ui/Spinner';
+import { FormContext } from './DashboardPage';
 
 const DeclarationsPage = () => {
   const [activeTab, setActiveTab] = useState('new');
+  const { isFormDirty, setIsFormDirty } = useContext(FormContext);
+
+  const handleTabChange = (tab) => {
+    if (isFormDirty && tab !== activeTab) {
+      const confirmLeave = window.confirm(
+        'У вас есть несохраненные изменения. Вы уверены, что хотите покинуть страницу? Изменения будут потеряны.'
+      );
+      if (!confirmLeave) return;
+      setIsFormDirty(false);
+    }
+    setActiveTab(tab);
+  };
 
   // Запрос для получения количества деклараций
   const { data: declarations, isLoading: declarationsLoading } = useQuery({
@@ -43,7 +56,7 @@ const DeclarationsPage = () => {
             <li className="nav-item">
               <button
                 className={`nav-link ${activeTab === 'new' ? 'active' : ''}`}
-                onClick={() => setActiveTab('new')}
+                onClick={() => handleTabChange('new')}
               >
                 <i className="bi bi-plus-circle me-2"></i>
                 Новая декларация
@@ -52,7 +65,7 @@ const DeclarationsPage = () => {
             <li className="nav-item">
               <button
                 className={`nav-link ${activeTab === 'list' ? 'active' : ''}`}
-                onClick={() => setActiveTab('list')}
+                onClick={() => handleTabChange('list')}
               >
                 <i className="bi bi-list-check me-2"></i>
                 Мои декларации

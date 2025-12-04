@@ -1,8 +1,9 @@
 // frontend/src/features/declarations/DeclarationForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { createDeclaration, getTaxTypes } from '../../api/taxpayersApi';
 import Spinner from '../../components/ui/Spinner';
+import { FormContext } from '../../pages/DashboardPage';
 
 const DeclarationForm = () => {
   // Исправлено: используем '3-NDFL' вместо '3-НДФЛ'
@@ -13,12 +14,222 @@ const DeclarationForm = () => {
   const [totalIncome, setTotalIncome] = useState('');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
+  
+  // Используем контекст для отслеживания dirty состояния
+  const { isFormDirty, setIsFormDirty } = useContext(FormContext);
+  
+  // Состояние для ошибок валидации
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Получаем текущий год и даты
+  const currentYear = new Date().getFullYear();
+  const minYear = currentYear - 5; // 5 лет назад
+  const maxDate = `${currentYear}-12-31`; // 31 декабря текущего года
+  const minDate = `${minYear}-01-01`; // 1 января 5 лет назад
 
   // Получаем типы налогов
   const { data: taxTypes, isLoading: taxTypesLoading } = useQuery({
     queryKey: ['taxTypes'],
     queryFn: getTaxTypes,
   });
+
+  // Сбрасываем состояние формы при монтировании
+  useEffect(() => {
+    setIsFormDirty(false);
+  }, [setIsFormDirty]);
+
+  // Обработка beforeunload
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isFormDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isFormDirty]);
+
+  // Общая функция для установки isFormDirty
+  const setFormDirty = () => {
+    if (!isFormDirty) {
+      setIsFormDirty(true);
+    }
+  };
+
+  // Обновленные обработчики с установкой isFormDirty
+  const handleDeclarationTypeChange = (value) => {
+    setFormDirty();
+    setDeclarationType(value);
+    // Очищаем ошибки при изменении
+    const newErrors = { ...validationErrors };
+    delete newErrors.targetInn;
+    setValidationErrors(newErrors);
+  };
+
+  const handleTargetInnChange = (value) => {
+    setFormDirty();
+    setTargetInn(value);
+    // Очищаем ошибки при изменении
+    const newErrors = { ...validationErrors };
+    delete newErrors.targetInn;
+    setValidationErrors(newErrors);
+  };
+
+  const handleTaxTypeChange = (value) => {
+    setFormDirty();
+    setTaxTypeId(value);
+    // Очищаем ошибки при изменении
+    const newErrors = { ...validationErrors };
+    delete newErrors.taxTypeId;
+    setValidationErrors(newErrors);
+  };
+
+  const handleTaxAmountChange = (value) => {
+    setFormDirty();
+    setTaxAmount(value);
+    // Очищаем ошибки при изменении
+    const newErrors = { ...validationErrors };
+    delete newErrors.taxAmount;
+    delete newErrors.amountComparison;
+    setValidationErrors(newErrors);
+  };
+
+  const handleTotalIncomeChange = (value) => {
+    setFormDirty();
+    setTotalIncome(value);
+    // Очищаем ошибки при изменении
+    const newErrors = { ...validationErrors };
+    delete newErrors.totalIncome;
+    delete newErrors.amountComparison;
+    setValidationErrors(newErrors);
+  };
+
+  const handlePeriodStartChange = (value) => {
+    setFormDirty();
+    setPeriodStart(value);
+    // Очищаем ошибки при изменении
+    const newErrors = { ...validationErrors };
+    delete newErrors.periodStart;
+    delete newErrors.periodRange;
+    delete newErrors.periodDates;
+    setValidationErrors(newErrors);
+  };
+
+  const handlePeriodEndChange = (value) => {
+    setFormDirty();
+    setPeriodEnd(value);
+    // Очищаем ошибки при изменении
+    const newErrors = { ...validationErrors };
+    delete newErrors.periodEnd;
+    delete newErrors.periodRange;
+    delete newErrors.periodDates;
+    setValidationErrors(newErrors);
+  };
+
+  // Функция проверки даты (в пределах текущего года и 5 лет назад)
+  const isValidDate = (dateString) => {
+    if (!dateString) return false;
+    
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    
+    return year >= minYear && year <= currentYear;
+  };
+
+  // Функция проверки периода (начало < окончание)
+  const isValidPeriod = (startDate, endDate) => {
+    if (!startDate || !endDate) return false;
+    return new Date(startDate) <= new Date(endDate);
+  };
+
+  // Валидация всей формы
+  const validateForm = () => {
+    const errors = {};
+    
+    // Валидация ИНН для 6-НДФЛ
+    if (declarationType === '6-NDFL') {
+      if (!targetInn) {
+        errors.targetInn = 'Укажите ИНН налогоплательщика';
+      } else if (!validateInn(targetInn)) {
+        errors.targetInn = 'ИНН должен содержать 10 или 12 цифр';
+      }
+    }
+    
+    // Валидация вида налога
+    if (!taxTypeId) {
+      errors.taxTypeId = 'Выберите вид налога';
+    }
+    
+    // Валидация суммы налога
+    if (!taxAmount) {
+      errors.taxAmount = 'Укажите начисленную сумму налога';
+    } else if (parseFloat(taxAmount) < 0) {
+      errors.taxAmount = 'Сумма налога не может быть отрицательной';
+    }
+    
+    // Валидация общего дохода
+    if (!totalIncome) {
+      errors.totalIncome = 'Укажите общий доход';
+    } else if (parseFloat(totalIncome) < 0) {
+      errors.totalIncome = 'Общий доход не может быть отрицательным';
+    }
+    
+    // Проверка что сумма налога не больше общего дохода
+    if (taxAmount && totalIncome) {
+      const tax = parseFloat(taxAmount);
+      const income = parseFloat(totalIncome);
+      if (tax > income) {
+        errors.amountComparison = 'Сумма налога не может быть больше общего дохода';
+      }
+    }
+    
+    // Валидация периода
+    if (!periodStart) {
+      errors.periodStart = 'Укажите дату начала периода';
+    } else if (!isValidDate(periodStart)) {
+      errors.periodStart = `Год начала периода должен быть в пределах ${minYear}-${currentYear}`;
+    }
+    
+    if (!periodEnd) {
+      errors.periodEnd = 'Укажите дату окончания периода';
+    } else if (!isValidDate(periodEnd)) {
+      errors.periodEnd = `Год окончания периода должен быть в пределах ${minYear}-${currentYear}`;
+    }
+    
+    if (periodStart && periodEnd && !isValidPeriod(periodStart, periodEnd)) {
+      errors.periodRange = 'Дата начала должна быть раньше или равна дате окончания';
+    }
+    
+    // Дополнительная проверка диапазона лет
+    if (periodStart && periodEnd) {
+      const startDate = new Date(periodStart);
+      const endDate = new Date(periodEnd);
+      const startYear = startDate.getFullYear();
+      const endYear = endDate.getFullYear();
+      
+      if (startYear < minYear || endYear < minYear) {
+        errors.periodDates = `Нельзя подавать декларацию за период раньше ${minYear} года`;
+      }
+      
+      if (startYear > currentYear || endYear > currentYear) {
+        errors.periodDates = `Нельзя подавать декларацию за период позже ${currentYear} года`;
+      }
+      
+      // Проверка что период не превышает 5 лет
+      if (endYear - startYear > 5) {
+        errors.periodDates = 'Период не может превышать 5 лет';
+      }
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const mutation = useMutation({
     mutationFn: createDeclaration,
@@ -31,6 +242,8 @@ const DeclarationForm = () => {
       setTotalIncome('');
       setPeriodStart('');
       setPeriodEnd('');
+      setValidationErrors({});
+      setIsFormDirty(false);
       alert('Декларация успешно подана!');
     },
     onError: (error) => {
@@ -38,21 +251,52 @@ const DeclarationForm = () => {
     }
   });
 
+  // Валидация ИНН
+  const validateInn = (inn) => {
+    if (!inn) return true;
+    const innRegex = /^\d{10}$|^\d{12}$/;
+    return innRegex.test(inn);
+  };
+
+  // Генерация дат для удобства пользователя
+  const setQuarterPeriod = (quarter, year = currentYear) => {
+    setFormDirty();
+    // Ограничиваем год текущим годом
+    const selectedYear = Math.min(year, currentYear);
+    
+    const quarters = {
+      1: { start: `${selectedYear}-01-01`, end: `${selectedYear}-03-31` },
+      2: { start: `${selectedYear}-04-01`, end: `${selectedYear}-06-30` },
+      3: { start: `${selectedYear}-07-01`, end: `${selectedYear}-09-30` },
+      4: { start: `${selectedYear}-10-01`, end: `${selectedYear}-12-31` }
+    };
+    
+    if (quarters[quarter]) {
+      handlePeriodStartChange(quarters[quarter].start);
+      handlePeriodEndChange(quarters[quarter].end);
+    }
+  };
+
+  const setYearPeriod = (year = currentYear) => {
+    setFormDirty();
+    // Ограничиваем год текущим годом
+    const selectedYear = Math.min(year, currentYear);
+    handlePeriodStartChange(`${selectedYear}-01-01`);
+    handlePeriodEndChange(`${selectedYear}-12-31`);
+  };
+
   const handleSubmit = (event) => {
     event.preventDefault();
     
-    if (!taxTypeId) {
-      alert('Пожалуйста, выберите вид налога');
-      return;
-    }
-
-    if (!periodStart || !periodEnd) {
-      alert('Пожалуйста, укажите период');
-      return;
-    }
-
-    if (new Date(periodStart) >= new Date(periodEnd)) {
-      alert('Дата начала периода должна быть раньше даты окончания');
+    // Валидация формы
+    if (!validateForm()) {
+      // Прокрутка к первой ошибке
+      const firstErrorKey = Object.keys(validationErrors)[0];
+      const firstErrorElement = document.querySelector(`[data-error="${firstErrorKey}"]`);
+      if (firstErrorElement) {
+        firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstErrorElement.focus();
+      }
       return;
     }
 
@@ -67,33 +311,6 @@ const DeclarationForm = () => {
     };
 
     mutation.mutate(declarationData);
-  };
-
-  // Валидация ИНН
-  const validateInn = (inn) => {
-    if (!inn) return true;
-    const innRegex = /^\d{10}$|^\d{12}$/;
-    return innRegex.test(inn);
-  };
-
-  // Генерация дат для удобства пользователя
-  const setQuarterPeriod = (quarter, year = new Date().getFullYear()) => {
-    const quarters = {
-      1: { start: `${year}-01-01`, end: `${year}-03-31` },
-      2: { start: `${year}-04-01`, end: `${year}-06-30` },
-      3: { start: `${year}-07-01`, end: `${year}-09-30` },
-      4: { start: `${year}-10-01`, end: `${year}-12-31` }
-    };
-    
-    if (quarters[quarter]) {
-      setPeriodStart(quarters[quarter].start);
-      setPeriodEnd(quarters[quarter].end);
-    }
-  };
-
-  const setYearPeriod = (year = new Date().getFullYear()) => {
-    setPeriodStart(`${year}-01-01`);
-    setPeriodEnd(`${year}-12-31`);
   };
 
   if (taxTypesLoading) {
@@ -146,7 +363,7 @@ const DeclarationForm = () => {
                         id="3-NDFL"
                         value="3-NDFL"
                         checked={declarationType === '3-NDFL'}
-                        onChange={(e) => setDeclarationType(e.target.value)}
+                        onChange={(e) => handleDeclarationTypeChange(e.target.value)}
                         disabled={mutation.isPending}
                       />
                       <label className="form-check-label fw-normal" htmlFor="3-NDFL">
@@ -166,7 +383,7 @@ const DeclarationForm = () => {
                         id="6-NDFL"
                         value="6-NDFL"
                         checked={declarationType === '6-NDFL'}
-                        onChange={(e) => setDeclarationType(e.target.value)}
+                        onChange={(e) => handleDeclarationTypeChange(e.target.value)}
                         disabled={mutation.isPending}
                       />
                       <label className="form-check-label fw-normal" htmlFor="6-NDFL">
@@ -182,7 +399,7 @@ const DeclarationForm = () => {
 
               {/* Поле ИНН для 6-НДФЛ */}
               {declarationType === '6-NDFL' && (
-                <div className="mb-4">
+                <div className="mb-4" data-error="targetInn">
                   <label htmlFor="targetInn" className="form-label fw-semibold">
                     ИНН налогоплательщика <span className="text-danger">*</span>
                   </label>
@@ -190,18 +407,19 @@ const DeclarationForm = () => {
                     id="targetInn"
                     type="text"
                     className={`form-control form-control-lg ${
-                      targetInn && !validateInn(targetInn) ? 'is-invalid' : ''
+                      validationErrors.targetInn ? 'is-invalid' : ''
                     }`}
                     value={targetInn}
-                    onChange={(e) => setTargetInn(e.target.value)}
+                    onChange={(e) => handleTargetInnChange(e.target.value)}
                     disabled={mutation.isPending}
                     required={declarationType === '6-NDFL'}
                     placeholder="Введите ИНН (10 или 12 цифр)"
                     maxLength="12"
                   />
-                  {targetInn && !validateInn(targetInn) && (
-                    <div className="invalid-feedback">
-                      ИНН должен содержать 10 или 12 цифр
+                  {validationErrors.targetInn && (
+                    <div className="invalid-feedback d-block">
+                      <i className="bi bi-exclamation-circle me-1"></i>
+                      {validationErrors.targetInn}
                     </div>
                   )}
                   <div className="form-text">
@@ -211,15 +429,17 @@ const DeclarationForm = () => {
               )}
 
               {/* Вид налога */}
-              <div className="mb-4">
+              <div className="mb-4" data-error="taxTypeId">
                 <label htmlFor="taxType" className="form-label fw-semibold">
                   Вид налога <span className="text-danger">*</span>
                 </label>
                 <select
                   id="taxType"
-                  className="form-select form-select-lg"
+                  className={`form-select form-select-lg ${
+                    validationErrors.taxTypeId ? 'is-invalid' : ''
+                  }`}
                   value={taxTypeId}
-                  onChange={(e) => setTaxTypeId(e.target.value)}
+                  onChange={(e) => handleTaxTypeChange(e.target.value)}
                   disabled={mutation.isPending}
                   required
                 >
@@ -230,13 +450,19 @@ const DeclarationForm = () => {
                     </option>
                   ))}
                 </select>
+                {validationErrors.taxTypeId && (
+                  <div className="invalid-feedback d-block">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.taxTypeId}
+                  </div>
+                )}
                 <div className="form-text">
                   Выберите вид налога, по которому подается декларация
                 </div>
               </div>
 
               {/* Начисленная сумма налога */}
-              <div className="mb-4">
+              <div className="mb-4" data-error="taxAmount">
                 <label htmlFor="taxAmount" className="form-label fw-semibold">
                   Начисленная сумма налога (руб.) <span className="text-danger">*</span>
                 </label>
@@ -244,9 +470,11 @@ const DeclarationForm = () => {
                   <input
                     id="taxAmount"
                     type="number"
-                    className="form-control"
+                    className={`form-control ${
+                      validationErrors.taxAmount || validationErrors.amountComparison ? 'is-invalid' : ''
+                    }`}
                     value={taxAmount}
-                    onChange={(e) => setTaxAmount(e.target.value)}
+                    onChange={(e) => handleTaxAmountChange(e.target.value)}
                     disabled={mutation.isPending}
                     required
                     min="0"
@@ -255,13 +483,19 @@ const DeclarationForm = () => {
                   />
                   <span className="input-group-text">₽</span>
                 </div>
+                {validationErrors.taxAmount && (
+                  <div className="invalid-feedback d-block">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.taxAmount}
+                  </div>
+                )}
                 <div className="form-text">
                   Укажите сумму начисленного налога по декларации
                 </div>
               </div>
 
               {/* Общий доход */}
-              <div className="mb-4">
+              <div className="mb-4" data-error="totalIncome">
                 <label htmlFor="totalIncome" className="form-label fw-semibold">
                   Общий доход (руб.) <span className="text-danger">*</span>
                 </label>
@@ -269,9 +503,11 @@ const DeclarationForm = () => {
                   <input
                     id="totalIncome"
                     type="number"
-                    className="form-control"
+                    className={`form-control ${
+                      validationErrors.totalIncome || validationErrors.amountComparison ? 'is-invalid' : ''
+                    }`}
                     value={totalIncome}
-                    onChange={(e) => setTotalIncome(e.target.value)}
+                    onChange={(e) => handleTotalIncomeChange(e.target.value)}
                     disabled={mutation.isPending}
                     required
                     min="0"
@@ -280,6 +516,18 @@ const DeclarationForm = () => {
                   />
                   <span className="input-group-text">₽</span>
                 </div>
+                {validationErrors.totalIncome && (
+                  <div className="invalid-feedback d-block">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.totalIncome}
+                  </div>
+                )}
+                {validationErrors.amountComparison && (
+                  <div className="invalid-feedback d-block">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.amountComparison}
+                  </div>
+                )}
                 <div className="form-text">
                   Укажите общую сумму дохода за отчетный период
                 </div>
@@ -302,71 +550,108 @@ const DeclarationForm = () => {
                       className="btn btn-outline-secondary btn-sm"
                       onClick={() => setYearPeriod()}
                     >
-                      Текущий год
+                      Текущий год ({currentYear})
                     </button>
                     <button 
                       type="button" 
                       className="btn btn-outline-secondary btn-sm"
                       onClick={() => setQuarterPeriod(1)}
                     >
-                      1 квартал
+                      1 квартал {currentYear}
                     </button>
                     <button 
                       type="button" 
                       className="btn btn-outline-secondary btn-sm"
                       onClick={() => setQuarterPeriod(2)}
                     >
-                      2 квартал
+                      2 квартал {currentYear}
                     </button>
                     <button 
                       type="button" 
                       className="btn btn-outline-secondary btn-sm"
                       onClick={() => setQuarterPeriod(3)}
                     >
-                      3 квартал
+                      3 квартал {currentYear}
                     </button>
                     <button 
                       type="button" 
                       className="btn btn-outline-secondary btn-sm"
                       onClick={() => setQuarterPeriod(4)}
                     >
-                      4 квартал
+                      4 квартал {currentYear}
                     </button>
                   </div>
                 </div>
 
                 <div className="row">
-                  <div className="col-md-6">
+                  <div className="col-md-6" data-error="periodStart">
                     <label htmlFor="periodStart" className="form-label">
                       Дата начала периода
                     </label>
                     <input
                       id="periodStart"
                       type="date"
-                      className="form-control"
+                      className={`form-control ${
+                        validationErrors.periodStart || validationErrors.periodRange || validationErrors.periodDates ? 'is-invalid' : ''
+                      }`}
                       value={periodStart}
-                      onChange={(e) => setPeriodStart(e.target.value)}
+                      onChange={(e) => handlePeriodStartChange(e.target.value)}
                       disabled={mutation.isPending}
                       required
+                      max={maxDate}
+                      min={minDate}
                     />
+                    {validationErrors.periodStart && (
+                      <div className="invalid-feedback d-block">
+                        <i className="bi bi-exclamation-circle me-1"></i>
+                        {validationErrors.periodStart}
+                      </div>
+                    )}
                   </div>
-                  <div className="col-md-6">
+                  <div className="col-md-6" data-error="periodEnd">
                     <label htmlFor="periodEnd" className="form-label">
                       Дата окончания периода
                     </label>
                     <input
                       id="periodEnd"
                       type="date"
-                      className="form-control"
+                      className={`form-control ${
+                        validationErrors.periodEnd || validationErrors.periodRange || validationErrors.periodDates ? 'is-invalid' : ''
+                      }`}
                       value={periodEnd}
-                      onChange={(e) => setPeriodEnd(e.target.value)}
+                      onChange={(e) => handlePeriodEndChange(e.target.value)}
                       disabled={mutation.isPending}
                       required
+                      max={maxDate}
+                      min={minDate}
                     />
+                    {validationErrors.periodEnd && (
+                      <div className="invalid-feedback d-block">
+                        <i className="bi bi-exclamation-circle me-1"></i>
+                        {validationErrors.periodEnd}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="form-text">
-                  Укажите начальную и конечную даты отчетного периода
+                
+                {validationErrors.periodRange && (
+                  <div className="invalid-feedback d-block mt-2">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.periodRange}
+                  </div>
+                )}
+                
+                {validationErrors.periodDates && (
+                  <div className="invalid-feedback d-block mt-2">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.periodDates}
+                  </div>
+                )}
+                
+                <div className="form-text mt-2">
+                  <i className="bi bi-info-circle me-1 text-primary"></i>
+                  Можно подавать декларации за период с {minYear} по {currentYear} год включительно.
+                  Максимальная дата окончания: 31 декабря {currentYear} года.
                 </div>
               </div>
 
