@@ -106,4 +106,14 @@ urlpatterns = [
     # Генерация ОГРН и ОГРНИП
     path('worker/generate-ogrn/', GenerateOGRNView.as_view(), name='generate-ogrn'),
     path('worker/generate-ogrnip/', GenerateOGRNIPView.as_view(), name='generate-ogrnip'),
+
+    path('worker/inspections/<int:inspection_id>/cancel/', CancelInspectionAPIView.as_view(), name='cancel-inspection'),
+
+    # API для проверок
+    path('worker/inspections/', WorkerInspectionsListAPIView.as_view(), name='worker-inspections-list'),
+    path('worker/inspections/<int:inspection_id>/', WorkerInspectionDetailAPIView.as_view(), name='worker-inspection-detail'),
+    path('worker/inspections/create/', WorkerInspectionCreateAPIView.as_view(), name='worker-inspection-create'),
+    path('worker/inspections/<int:inspection_id>/update-data/', WorkerInspectionDataUpdateAPIView.as_view(), name='worker-inspection-update-data'),  # Добавьте эту строку
+    path('worker/inspections/<int:inspection_id>/update-status/', UpdateInspectionStatusAPIView.as_view(), name='update-inspection-status'),
+    path('worker/inspections/<int:inspection_id>/cancel/', CancelInspectionAPIView.as_view(), name='cancel-inspection'),
 ]

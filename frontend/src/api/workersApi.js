@@ -281,13 +281,6 @@ export const getAllInspections = async (page = 1, pageSize = 10) => {
   return data;
 };
 
-
-// Обновить проверку
-export const updateInspection = async (inspectionId, inspectionData) => {
-  const { data } = await axiosInstance.patch(`/worker/inspections/${inspectionId}/update/`, inspectionData);
-  return data;
-};
-
 // Обновить статус проверки
 export const updateInspectionStatus = async (inspectionId, statusData) => {
   const { data } = await axiosInstance.patch(`/worker/inspections/${inspectionId}/update-status/`, statusData);
@@ -383,5 +376,21 @@ export const generateOGRNIP = async (regionKey) => {
   const { data } = await axiosInstance.post('/worker/generate-ogrnip/', {
     region_key: regionKey
   });
+  return data;
+};
+
+// Отменить проверку
+export const cancelInspection = async (inspectionId) => {
+  const { data } = await axiosInstance.post(`/worker/inspections/${inspectionId}/cancel/`);
+  return data;
+};
+
+export const updateInspection = async (inspectionId, inspectionData) => {
+  // Убедимся, что мы не отправляем inspection_type_status_id при редактировании
+  const { inspection_type_status_id, ...dataToSend } = inspectionData;
+  const { data } = await axiosInstance.patch(
+    `/worker/inspections/${inspectionId}/update-data/`, 
+    dataToSend
+  );
   return data;
 };

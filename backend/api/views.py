@@ -1747,19 +1747,11 @@ class WorkerInspectionDetailAPIView(APIView):
                 """, [inspection_id])
                 participants_data = cursor.fetchall()
                 
-                # Получаем нарушения по проверке (ИСПРАВЛЕННЫЙ ЗАПРОС)
+                # Получаем нарушения по проверке (исправленный запрос)
                 cursor.execute("""
                     SELECT v.violation_id, v.sum_to_pay, v.violation_type_id, v.period_id,
-                           vt.violation_name, 
-                           CASE 
-                               WHEN tp.period_type_id = 1 THEN TO_CHAR(tp.start_date, 'YYYY') || ' год'
-                               WHEN tp.period_type_id = 2 THEN 
-                                   TO_CHAR(tp.start_date, 'YYYY') || ' Q' || 
-                                   EXTRACT(QUARTER FROM tp.start_date)
-                               WHEN tp.period_type_id = 3 THEN 
-                                   TO_CHAR(tp.start_date, 'TMMonth') || ' ' || TO_CHAR(tp.start_date, 'YYYY')
-                               ELSE TO_CHAR(tp.start_date, 'DD.MM.YYYY') || ' - ' || TO_CHAR(tp.end_date, 'DD.MM.YYYY')
-                           END as period_name
+                           vt.violation_name,
+                           tp.start_date, tp.end_date, tp.period_type_id
                     FROM identified_violation v
                     INNER JOIN violation_type vt ON v.violation_type_id = vt.violation_type_id
                     INNER JOIN tax_period tp ON v.period_id = tp.period_id
@@ -1797,7 +1789,7 @@ class WorkerInspectionDetailAPIView(APIView):
                         'violation_type_id': v[2],
                         'period_id': v[3],
                         'violation_type_name': v[4],
-                        'period_name': v[5]
+                        'period_name': self.get_period_name(v[5], v[6], v[7])
                     } for v in violations_data
                 ]
             }
@@ -1807,6 +1799,24 @@ class WorkerInspectionDetailAPIView(APIView):
         except Exception as e:
             print(f"Error in WorkerInspectionDetailAPIView: {e}")
             return Response({'error': f'Ошибка загрузки данных проверки: {str(e)}'}, status=500)
+    
+    def get_period_name(self, start_date, end_date, period_type_id):
+        """Формирует имя периода на основе данных"""
+        if not start_date:
+            return "Не указано"
+        
+        if period_type_id == 1:  # годовой
+            return f"{start_date.year} год"
+        elif period_type_id == 2:  # квартальный
+            quarter = (start_date.month - 1) // 3 + 1
+            return f"{start_date.year} Q{quarter}"
+        elif period_type_id == 3:  # месячный
+            month_names = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                          'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+            return f"{month_names[start_date.month - 1]} {start_date.year}"
+        else:
+            return f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
+
 
 class WorkerInspectionCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1855,6 +1865,9 @@ class WorkerInspectionCreateAPIView(APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
+                # Преобразуем naive datetime в aware (с часовым поясом)
+                inspection_date_aware = timezone.make_aware(inspection_date)
+                
                 # Проверяем существование налогоплательщика
                 try:
                     taxpayer = Taxpayer.objects.get(taxpayer_id=taxpayer_id)
@@ -1862,6 +1875,24 @@ class WorkerInspectionCreateAPIView(APIView):
                     return Response(
                         {'error': 'Налогоплательщик не найден'},
                         status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # ВАЛИДАЦИЯ ДАТЫ
+                now = timezone.now()
+                
+                # Проверяем, что дата не в прошлом
+                if inspection_date_aware < now:
+                    return Response(
+                        {'error': 'Дата проверки не может быть в прошлом'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Проверяем, что дата не более чем на год вперед
+                max_date = now + timezone.timedelta(days=365)
+                if inspection_date_aware > max_date:
+                    return Response(
+                        {'error': 'Дата проверки не может быть более чем на год вперед'},
+                        status=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Создаем проверку
@@ -1872,19 +1903,22 @@ class WorkerInspectionCreateAPIView(APIView):
                             inspection_reason, inspection_type_status_id
                         ) VALUES (%s, %s, %s, %s, 1)
                         RETURNING inspection_id
-                    """, [inspection_date, taxpayer_id, inspection_type_id, inspection_reason_id])
+                    """, [inspection_date_aware, taxpayer_id, inspection_type_id, inspection_reason_id])
                     inspection_id = cursor.fetchone()[0]
                 
                 # Создаем множество для уникальных участников
                 unique_participants = set()
                 
-                # Добавляем текущего сотрудника как участника
-                current_officer_id = worker_auth.tax_officer.tax_officer_id
-                unique_participants.add(current_officer_id)
-                
                 # Добавляем других участников (исключая дубликаты)
                 for participant_id in participants:
                     unique_participants.add(int(participant_id))
+                
+                # Если не выбрано ни одного участника - возвращаем ошибку
+                if not unique_participants:
+                    return Response(
+                        {'error': 'Необходимо выбрать хотя бы одного участника проверки'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
                 
                 # Вставляем всех уникальных участников
                 for participant_id in unique_participants:
@@ -1921,36 +1955,48 @@ class WorkerInspectionUpdateAPIView(APIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
+            # Получаем текущую проверку
             with connection.cursor() as cursor:
-                # Обновляем основную информацию о проверке
-                update_fields = []
-                params = []
+                cursor.execute("""
+                    SELECT inspection_type_status_id, inspection_date 
+                    FROM inspection 
+                    WHERE inspection_id = %s
+                """, [inspection_id])
+                current_inspection = cursor.fetchone()
                 
-                if 'inspection_date' in request.data:
-                    update_fields.append("inspection_date = %s")
-                    params.append(request.data['inspection_date'])
+                if not current_inspection:
+                    return Response({'error': 'Проверка не найдена'}, status=404)
                 
-                if 'inspection_type_id' in request.data:
-                    update_fields.append("inspection_type_id = %s")
-                    params.append(request.data['inspection_type_id'])
-                
-                if 'inspection_reason' in request.data:
-                    update_fields.append("inspection_reason = %s")
-                    params.append(request.data['inspection_reason'])
-                
-                if 'inspection_type_status_id' in request.data:
-                    update_fields.append("inspection_type_status_id = %s")
-                    params.append(request.data['inspection_type_status_id'])
-                
-                if update_fields:
-                    params.append(inspection_id)
-                    cursor.execute(f"""
-                        UPDATE inspection 
-                        SET {', '.join(update_fields)}
-                        WHERE inspection_id = %s
-                    """, params)
+                current_status = current_inspection[0]
+                inspection_date = current_inspection[1]
             
-            return Response({'message': 'Проверка успешно обновлена'})
+            new_status = request.data.get('inspection_type_status_id')
+            
+            # Проверяем, можно ли отменять
+            if new_status == 4:  # Отмена
+                # Можно отменять только запланированные проверки
+                if current_status != 1:  # Не запланирована
+                    return Response(
+                        {'error': 'Отменить можно только запланированную проверку'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Проверяем, что проверка еще не началась
+                if inspection_date and inspection_date < timezone.now():
+                    return Response(
+                        {'error': 'Нельзя отменить начавшуюся проверку'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Обновляем статус
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE inspection 
+                    SET inspection_type_status_id = %s 
+                    WHERE inspection_id = %s
+                """, [new_status, inspection_id])
+            
+            return Response({'message': 'Статус проверки обновлен'})
             
         except Exception as e:
             return Response(
@@ -2243,28 +2289,60 @@ class InspectionViolationsListAPIView(APIView):
     def get(self, request, inspection_id):
         try:
             with connection.cursor() as cursor:
+                # Запрос с правильными именами колонок из таблицы tax_period
                 cursor.execute("""
-                    SELECT v.violation_id, v.sum_to_pay, v.violation_type_id, v.period_id, 
-                           vt.violation_name, tp.period_name
+                    SELECT 
+                        v.violation_id, 
+                        v.sum_to_pay, 
+                        v.violation_type_id, 
+                        v.period_id, 
+                        vt.violation_name,
+                        tp.start_date,
+                        tp.end_date,
+                        tp.period_type_id
                     FROM identified_violation v
-                    INNER JOIN violation_type vt ON v.violation_type_id = vt.violation_type_id
-                    INNER JOIN tax_period tp ON v.period_id = tp.period_id
+                    LEFT JOIN violation_type vt ON v.violation_type_id = vt.violation_type_id
+                    LEFT JOIN tax_period tp ON v.period_id = tp.period_id
                     WHERE v.inspection_id = %s
+                    ORDER BY v.violation_id DESC
                 """, [inspection_id])
                 rows = cursor.fetchall()
+                
             violations = []
             for row in rows:
+                # Формируем имя периода на основе данных
+                period_name = self.get_period_name(row[5], row[6], row[7])
                 violations.append({
                     'violation_id': row[0],
                     'sum_to_pay': float(row[1]) if row[1] else 0,
                     'violation_type_id': row[2],
                     'period_id': row[3],
-                    'violation_type_name': row[4],
-                    'period_name': row[5]
+                    'violation_type_name': row[4] if row[4] else 'Не указано',
+                    'period_name': period_name
                 })
+                
             return Response(violations)
+            
         except Exception as e:
+            print(f"Error in InspectionViolationsListAPIView: {e}")
             return Response({'error': str(e)}, status=500)
+
+    def get_period_name(self, start_date, end_date, period_type_id):
+        """Формирует имя периода на основе данных"""
+        if not start_date:
+            return "Не указано"
+        
+        if period_type_id == 1:  # годовой
+            return f"{start_date.year} год"
+        elif period_type_id == 2:  # квартальный
+            quarter = (start_date.month - 1) // 3 + 1
+            return f"{start_date.year} Q{quarter}"
+        elif period_type_id == 3:  # месячный
+            month_names = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                          'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+            return f"{month_names[start_date.month - 1]} {start_date.year}"
+        else:
+            return f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
 
 class CreateViolationAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -2280,9 +2358,32 @@ class CreateViolationAPIView(APIView):
             if not all([inspection_id, violation_type_id, period_id]):
                 return Response({'error': 'Не указаны обязательные поля'}, status=400)
 
+            # Проверяем статус проверки
             with connection.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO identified_violation (inspection_id, violation_type_id, sum_to_pay, period_id)
+                    SELECT inspection_type_status_id 
+                    FROM inspection 
+                    WHERE inspection_id = %s
+                """, [inspection_id])
+                result = cursor.fetchone()
+                
+                if not result:
+                    return Response({'error': 'Проверка не найдена'}, status=404)
+                    
+                inspection_status = result[0]
+                
+                # Разрешаем добавлять нарушения только для проверок "В процессе" (статус 2)
+                if inspection_status != 2:
+                    return Response(
+                        {'error': 'Нарушения можно добавлять только для проверок в процессе'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Создаем нарушение
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO identified_violation 
+                    (inspection_id, violation_type_id, sum_to_pay, period_id)
                     VALUES (%s, %s, %s, %s)
                     RETURNING violation_id
                 """, [inspection_id, violation_type_id, sum_to_pay, period_id])
@@ -2298,6 +2399,28 @@ class UpdateViolationAPIView(APIView):
 
     def patch(self, request, violation_id):
         try:
+            # Получаем ID проверки по нарушению
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT i.inspection_id, i.inspection_type_status_id 
+                    FROM identified_violation v
+                    JOIN inspection i ON v.inspection_id = i.inspection_id
+                    WHERE v.violation_id = %s
+                """, [violation_id])
+                result = cursor.fetchone()
+                
+                if not result:
+                    return Response({'error': 'Нарушение не найдено'}, status=404)
+                    
+                inspection_id, inspection_status = result
+                
+                # Проверяем статус проверки
+                if inspection_status != 2:
+                    return Response(
+                        {'error': 'Нарушения можно редактировать только для проверок в процессе'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
             violation_type_id = request.data.get('violation_type_id')
             sum_to_pay = request.data.get('sum_to_pay')
             period_id = request.data.get('period_id')
@@ -2337,6 +2460,28 @@ class DeleteViolationAPIView(APIView):
 
     def delete(self, request, violation_id):
         try:
+            # Получаем ID проверки по нарушению
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT i.inspection_id, i.inspection_type_status_id 
+                    FROM identified_violation v
+                    JOIN inspection i ON v.inspection_id = i.inspection_id
+                    WHERE v.violation_id = %s
+                """, [violation_id])
+                result = cursor.fetchone()
+                
+                if not result:
+                    return Response({'error': 'Нарушение не найдено'}, status=404)
+                    
+                inspection_id, inspection_status = result
+                
+                # Проверяем статус проверки
+                if inspection_status != 2:
+                    return Response(
+                        {'error': 'Нарушения можно удалять только для проверок в процессе'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
             with connection.cursor() as cursor:
                 cursor.execute("DELETE FROM identified_violation WHERE violation_id = %s", [violation_id])
             return Response({'message': 'Нарушение удалено'})
@@ -2449,6 +2594,72 @@ class AllInspectionsListAPIView(APIView):
             print(f"Error in AllInspectionsListAPIView: {e}")
             return Response({'error': str(e)}, status=500)
         
+class CancelInspectionAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def post(self, request, inspection_id):
+        try:
+            user_inn = request.user.username
+            worker_auth = WorkerAuth.objects.get(inn=user_inn)
+            
+            # Проверяем права
+            if not worker_auth.tax_officer or worker_auth.tax_officer.role_id < 2:
+                return Response(
+                    {'error': 'Недостаточно прав для отмены проверки'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            with connection.cursor() as cursor:
+                # Получаем текущий статус и дату проверки
+                cursor.execute("""
+                    SELECT inspection_type_status_id, inspection_date 
+                    FROM inspection 
+                    WHERE inspection_id = %s
+                """, [inspection_id])
+                result = cursor.fetchone()
+                
+                if not result:
+                    return Response({'error': 'Проверка не найдена'}, status=404)
+                
+                current_status = result[0]
+                inspection_date = result[1]
+                
+                # Проверяем, можно ли отменять
+                if current_status != 1:  # Не запланирована
+                    return Response(
+                        {'error': 'Отменить можно только запланированную проверку'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Преобразуем дату проверки к aware datetime для сравнения
+                if inspection_date:
+                    # Если дата naive (без часового пояса), делаем ее aware
+                    if timezone.is_naive(inspection_date):
+                        inspection_date = timezone.make_aware(inspection_date)
+                    
+                    # Проверяем, что проверка еще не началась
+                    if inspection_date < timezone.now():
+                        return Response(
+                            {'error': 'Нельзя отменить начавшуюся проверку'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                
+                # Обновляем статус на "Отменена"
+                cursor.execute("""
+                    UPDATE inspection 
+                    SET inspection_type_status_id = 4 
+                    WHERE inspection_id = %s
+                """, [inspection_id])
+                
+                return Response({'message': 'Проверка успешно отменена'})
+                
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при отмене проверки: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 class CreateWorkerAPIView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [InnAuthentication]
@@ -3734,3 +3945,123 @@ class GenerateOGRNIPView(APIView):
         control = str((int(base) % 13) % 10)
         
         return base + control
+    
+class WorkerInspectionDataUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [InnAuthentication]
+
+    def patch(self, request, inspection_id):
+        try:
+            user_inn = request.user.username
+            worker_auth = WorkerAuth.objects.get(inn=user_inn)
+            
+            # Проверяем, является ли сотрудник старшим инспектором или выше
+            if not worker_auth.tax_officer or worker_auth.tax_officer.role_id < 2:
+                return Response(
+                    {'error': 'Недостаточно прав для редактирования проверки'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Получаем текущую проверку
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT inspection_type_status_id 
+                    FROM inspection 
+                    WHERE inspection_id = %s
+                """, [inspection_id])
+                current_inspection = cursor.fetchone()
+                
+                if not current_inspection:
+                    return Response({'error': 'Проверка не найдена'}, status=404)
+                
+                current_status = current_inspection[0]
+                
+                # Редактировать можно только запланированные проверки
+                if current_status != 1:
+                    return Response(
+                        {'error': 'Редактировать можно только запланированные проверки'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Получаем данные для обновления
+            inspection_date_str = request.data.get('inspection_date')
+            inspection_type_id = request.data.get('inspection_type_id')
+            inspection_reason = request.data.get('inspection_reason')
+            participants = request.data.get('participants', [])
+            
+            # Валидация даты
+            if inspection_date_str:
+                try:
+                    inspection_date = datetime.fromisoformat(inspection_date_str.replace('Z', ''))
+                    # Преобразуем в aware datetime
+                    inspection_date_aware = timezone.make_aware(inspection_date)
+                    
+                    # Валидация: дата не может быть в прошлом
+                    if inspection_date_aware < timezone.now():
+                        return Response(
+                            {'error': 'Дата проверки не может быть в прошлом'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    
+                    # Валидация: дата не может быть более чем на год вперед
+                    max_date = timezone.now() + timezone.timedelta(days=365)
+                    if inspection_date_aware > max_date:
+                        return Response(
+                            {'error': 'Дата проверки не может быть более чем на год вперед'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            UPDATE inspection 
+                            SET inspection_date = %s 
+                            WHERE inspection_id = %s
+                        """, [inspection_date_aware, inspection_id])
+                except ValueError as e:
+                    return Response(
+                        {'error': f'Неверный формат даты: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Обновляем тип проверки
+            if inspection_type_id:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        UPDATE inspection 
+                        SET inspection_type_id = %s 
+                        WHERE inspection_id = %s
+                    """, [inspection_type_id, inspection_id])
+            
+            # Обновляем причину проверки
+            if inspection_reason:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        UPDATE inspection 
+                        SET inspection_reason = %s 
+                        WHERE inspection_id = %s
+                    """, [inspection_reason, inspection_id])
+            
+            # Обновляем участников
+            if participants:
+                # Удаляем старых участников
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        DELETE FROM tax_officer_inspection 
+                        WHERE inspection_id = %s
+                    """, [inspection_id])
+                
+                # Добавляем новых участников
+                for participant_id in participants:
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            INSERT INTO tax_officer_inspection (tax_officer_id, inspection_id)
+                            VALUES (%s, %s)
+                        """, [participant_id, inspection_id])
+            
+            return Response({'message': 'Данные проверки обновлены'})
+                
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка при обновлении данных проверки: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

@@ -148,9 +148,24 @@ const WorkerInspections = () => {
       const selectedDate = new Date(formData.inspection_date);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      
+      // Проверяем, что дата не в прошлом
       if (selectedDate < today) {
         errors.push('Дата проверки не может быть в прошлом');
       }
+      
+      // Проверяем, что дата не более чем на год вперед
+      const maxDate = new Date();
+      maxDate.setFullYear(today.getFullYear() + 1);
+      maxDate.setHours(23, 59, 59, 999);
+      
+      if (selectedDate > maxDate) {
+        errors.push('Дата проверки не может быть более чем на год вперед');
+      }
+    }
+
+    if (!formData.participants || formData.participants.length === 0) {
+      errors.push('Выберите хотя бы одного участника проверки');
     }
 
     return errors;
@@ -161,6 +176,7 @@ const WorkerInspections = () => {
     
     const validationErrors = validateForm();
     if (validationErrors.length > 0) {
+      // Показываем все ошибки в одном сообщении
       alert(validationErrors.join('\n'));
       return;
     }
