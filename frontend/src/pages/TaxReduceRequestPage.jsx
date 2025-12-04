@@ -1,13 +1,25 @@
-// frontend/src/pages/TaxReduceRequestPage.jsx
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import CreateRequestForm from '../features/tax_requests/CreateRequestForm';
 import MyRequestsList from '../features/tax_requests/MyRequestsList';
 import { getMyRequests } from '../api/taxpayersApi';
 import Spinner from '../components/ui/Spinner';
+import { FormContext } from './DashboardPage';
 
 const TaxReduceRequestPage = () => {
   const [activeTab, setActiveTab] = useState('new');
+  const { isFormDirty, setIsFormDirty } = useContext(FormContext);
+
+  const handleTabChange = (tab) => {
+    if (isFormDirty && tab !== activeTab) {
+      const confirmLeave = window.confirm(
+        'У вас есть несохраненные изменения. Вы уверены, что хотите покинуть страницу? Изменения будут потеряны.'
+      );
+      if (!confirmLeave) return;
+      setIsFormDirty(false);
+    }
+    setActiveTab(tab);
+  };
 
   // Запрос для получения количества заявлений
   const { data: requests, isLoading: requestsLoading } = useQuery({
@@ -43,7 +55,7 @@ const TaxReduceRequestPage = () => {
             <li className="nav-item">
               <button
                 className={`nav-link ${activeTab === 'new' ? 'active' : ''}`}
-                onClick={() => setActiveTab('new')}
+                onClick={() => handleTabChange('new')}
               >
                 <i className="bi bi-plus-circle me-2"></i>
                 Новое заявление
@@ -52,7 +64,7 @@ const TaxReduceRequestPage = () => {
             <li className="nav-item">
               <button
                 className={`nav-link ${activeTab === 'list' ? 'active' : ''}`}
-                onClick={() => setActiveTab('list')}
+                onClick={() => handleTabChange('list')}
               >
                 <i className="bi bi-list-check me-2"></i>
                 Мои заявления

@@ -1,9 +1,10 @@
-// frontend/src/features/tax_requests/CreateRequestForm.jsx
-import React, { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'; // Добавлен useQueryClient
+import React, { useState, useRef, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createTaxReduceRequest, getReduceBases, getTaxTypes } from '../../api/taxpayersApi';
 import Spinner from '../../components/ui/Spinner';
 import "./CreateRequestForm.css"
+import { useContext } from 'react';
+import { FormContext } from '../../pages/DashboardPage';
 
 const CreateRequestForm = () => {
   const [amount, setAmount] = useState('');
@@ -12,6 +13,14 @@ const CreateRequestForm = () => {
   const [selectedReduceTypeId, setSelectedReduceTypeId] = useState('');
   const [selectedTaxTypes, setSelectedTaxTypes] = useState([]);
   const [periods, setPeriods] = useState([{ start_date: '', end_date: '' }]);
+  
+  // ИСПРАВЛЕНО: используем оба значения из контекста
+  const { isFormDirty, setIsFormDirty } = useContext(FormContext);
+  
+  // Добавляем состояние для ошибок
+  const [validationErrors, setValidationErrors] = useState({});
+  
+  const formRef = useRef(null);
 
   // Добавлен useQueryClient
   const queryClient = useQueryClient();
@@ -26,10 +35,103 @@ const CreateRequestForm = () => {
     queryFn: getTaxTypes,
   });
 
+  // Сбрасываем состояние формы при монтировании компонента
+  useEffect(() => {
+    setIsFormDirty(false);
+  }, [setIsFormDirty]);
+
+  // Функция проверки даты (в пределах ±5 лет от текущей)
+  const isValidDate = (dateString) => {
+    if (!dateString) return false;
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    const fiveYearsAgo = new Date();
+    fiveYearsAgo.setFullYear(now.getFullYear() - 5);
+    const fiveYearsFromNow = new Date();
+    fiveYearsFromNow.setFullYear(now.getFullYear() + 5);
+    
+    return date >= fiveYearsAgo && date <= fiveYearsFromNow;
+  };
+
+  // Функция проверки периода (начало < окончание)
+  const isValidPeriod = (startDate, endDate) => {
+    if (!startDate || !endDate) return false;
+    return new Date(startDate) < new Date(endDate);
+  };
+
+  // Проверка всей формы
+  const validateForm = () => {
+    const errors = {};
+    
+    // Проверка типа снижения
+    if (!selectedReduceTypeId) {
+      errors.reduceType = 'Выберите тип снижения';
+    }
+    
+    // Проверка основания
+    if (!selectedBaseId) {
+      errors.base = 'Выберите основание для снижения';
+    }
+    
+    // Проверка типов налогов
+    if (selectedTaxTypes.length === 0) {
+      errors.taxTypes = 'Выберите хотя бы один вид налога';
+    }
+    
+    // Проверка периодов
+    periods.forEach((period, index) => {
+      if (!period.start_date) {
+        errors[`period_start_${index}`] = 'Укажите дату начала периода';
+      } else if (!isValidDate(period.start_date)) {
+        errors[`period_start_${index}`] = 'Дата должна быть в пределах ±5 лет от текущей';
+      }
+      
+      if (!period.end_date) {
+        errors[`period_end_${index}`] = 'Укажите дату окончания периода';
+      } else if (!isValidDate(period.end_date)) {
+        errors[`period_end_${index}`] = 'Дата должна быть в пределах ±5 лет от текущей';
+      }
+      
+      if (period.start_date && period.end_date && !isValidPeriod(period.start_date, period.end_date)) {
+        errors[`period_range_${index}`] = 'Дата начала должна быть раньше даты окончания';
+      }
+    });
+    
+    // Проверка суммы
+    if (!amount) {
+      errors.amount = 'Укажите запрашиваемую сумму снижения';
+    } else if (parseFloat(amount) <= 0) {
+      errors.amount = 'Сумма должна быть положительной';
+    }
+    
+    // Проверка описания
+    if (!description.trim()) {
+      errors.description = 'Заполните подробное обоснование';
+    } else if (description.trim().length < 20) {
+      errors.description = 'Обоснование должно быть не менее 20 символов';
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Общая функция для установки isFormDirty
+  const setFormDirty = () => {
+    if (!isFormDirty) {
+      setIsFormDirty(true);
+    }
+  };
+
+  // Отслеживаем изменения формы для isFormDirty
+  const handleFieldChange = (setter, value) => {
+    setFormDirty();
+    setter(value);
+  };
+
   const mutation = useMutation({
     mutationFn: createTaxReduceRequest,
     onSuccess: () => {
-      // Теперь queryClient доступен
       queryClient.invalidateQueries({ queryKey: ['myRequests'] });
       setAmount('');
       setDescription('');
@@ -37,14 +139,18 @@ const CreateRequestForm = () => {
       setSelectedReduceTypeId('');
       setSelectedTaxTypes([]);
       setPeriods([{ start_date: '', end_date: '' }]);
+      setValidationErrors({});
+      setIsFormDirty(false);
       alert('Заявление успешно отправлено на рассмотрение!');
     },
     onError: (error) => {
       console.error('Ошибка при отправке заявления:', error);
+      alert('Произошла ошибка при отправке заявления');
     }
   });
 
   const handleTaxTypeChange = (taxTypeId) => {
+    setFormDirty();
     setSelectedTaxTypes(prev => 
       prev.includes(taxTypeId) 
         ? prev.filter(id => id !== taxTypeId)
@@ -53,17 +159,20 @@ const CreateRequestForm = () => {
   };
 
   const addPeriod = () => {
+    setFormDirty();
     setPeriods([...periods, { start_date: '', end_date: '' }]);
   };
 
   const removePeriod = (index) => {
     if (periods.length > 1) {
+      setFormDirty();
       const newPeriods = periods.filter((_, i) => i !== index);
       setPeriods(newPeriods);
     }
   };
 
   const updatePeriod = (index, field, value) => {
+    setFormDirty();
     const newPeriods = periods.map((period, i) => 
       i === index ? { ...period, [field]: value } : period
     );
@@ -72,6 +181,7 @@ const CreateRequestForm = () => {
 
   // Генерация дат для удобства пользователя
   const setQuarterPeriod = (quarter, year = new Date().getFullYear()) => {
+    setFormDirty();
     const quarters = {
       1: { start: `${year}-01-01`, end: `${year}-03-31` },
       2: { start: `${year}-04-01`, end: `${year}-06-30` },
@@ -85,26 +195,22 @@ const CreateRequestForm = () => {
   };
 
   const setYearPeriod = (year = new Date().getFullYear()) => {
+    setFormDirty();
     setPeriods([{ start_date: `${year}-01-01`, end_date: `${year}-12-31` }]);
   };
 
   const handleSubmit = (event) => {
     event.preventDefault();
     
-    // Валидация периодов
-    for (const period of periods) {
-      if (!period.start_date || !period.end_date) {
-        alert('Пожалуйста, заполните все даты периодов.');
-        return;
+    // Валидация формы
+    if (!validateForm()) {
+      // Прокрутка к первой ошибке
+      const firstErrorKey = Object.keys(validationErrors)[0];
+      const firstErrorElement = document.querySelector(`[data-error="${firstErrorKey}"]`);
+      if (firstErrorElement) {
+        firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstErrorElement.focus();
       }
-      if (new Date(period.start_date) >= new Date(period.end_date)) {
-        alert('Дата начала периода должна быть раньше даты окончания.');
-        return;
-      }
-    }
-
-    if (!selectedBaseId || !selectedReduceTypeId || selectedTaxTypes.length === 0 || periods.length === 0) {
-      alert('Пожалуйста, заполните все обязательные поля.');
       return;
     }
 
@@ -119,6 +225,22 @@ const CreateRequestForm = () => {
   };
 
   const isLoading = basesLoading || taxTypesLoading;
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isFormDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isFormDirty]);
 
   if (isLoading) return (
     <div className="d-flex justify-content-center py-5">
@@ -159,17 +281,17 @@ const CreateRequestForm = () => {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit}>
+            <form ref={formRef} onSubmit={handleSubmit}>
               {/* Тип снижения */}
-              <div className="mb-4">
+              <div className="mb-4" data-error="reduceType">
                 <label htmlFor="reduceType" className="form-label fw-semibold">
                   Тип снижения <span className="text-danger">*</span>
                 </label>
                 <select
                   id="reduceType"
-                  className="form-select form-select-lg"
+                  className={`form-select form-select-lg ${validationErrors.reduceType ? 'is-invalid' : ''}`}
                   value={selectedReduceTypeId}
-                  onChange={(e) => setSelectedReduceTypeId(e.target.value)}
+                  onChange={(e) => handleFieldChange(setSelectedReduceTypeId, e.target.value)}
                   disabled={mutation.isPending}
                   required
                 >
@@ -177,21 +299,27 @@ const CreateRequestForm = () => {
                   <option value="1">Полное освобождение</option>
                   <option value="2">Частичное снижение</option>
                 </select>
+                {validationErrors.reduceType && (
+                  <div className="invalid-feedback d-block">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.reduceType}
+                  </div>
+                )}
                 <div className="form-text">
                   Выберите тип снижения налоговой нагрузки
                 </div>
               </div>
 
               {/* Основание для снижения */}
-              <div className="mb-4">
+              <div className="mb-4" data-error="base">
                 <label htmlFor="reduceBase" className="form-label fw-semibold">
                   Основание для снижения налога <span className="text-danger">*</span>
                 </label>
                 <select
                   id="reduceBase"
-                  className="form-select form-select-lg"
+                  className={`form-select form-select-lg ${validationErrors.base ? 'is-invalid' : ''}`}
                   value={selectedBaseId}
-                  onChange={(e) => setSelectedBaseId(e.target.value)}
+                  onChange={(e) => handleFieldChange(setSelectedBaseId, e.target.value)}
                   disabled={mutation.isPending}
                   required
                 >
@@ -202,17 +330,23 @@ const CreateRequestForm = () => {
                     </option>
                   ))}
                 </select>
+                {validationErrors.base && (
+                  <div className="invalid-feedback d-block">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.base}
+                  </div>
+                )}
                 <div className="form-text">
                   Выберите подходящее основание для снижения налога из выпадающего списка
                 </div>
               </div>
 
               {/* Типы налогов */}
-              <div className="mb-4">
+              <div className="mb-4" data-error="taxTypes">
                 <label className="form-label fw-semibold">
                   Типы налогов для снижения <span className="text-danger">*</span>
                 </label>
-                <div className="border rounded p-3">
+                <div className={`border rounded p-3 ${validationErrors.taxTypes ? 'border-danger' : ''}`}>
                   {taxTypes?.map(taxType => (
                     <div key={taxType.tax_type_id} className="form-check mb-2">
                       <input
@@ -229,6 +363,12 @@ const CreateRequestForm = () => {
                     </div>
                   ))}
                 </div>
+                {validationErrors.taxTypes && (
+                  <div className="invalid-feedback d-block">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.taxTypes}
+                  </div>
+                )}
                 <div className="form-text">
                   Выберите типы налогов, для которых запрашивается снижение
                 </div>
@@ -302,37 +442,60 @@ const CreateRequestForm = () => {
                     </h6>
                     
                     <div className="row">
-                      <div className="col-md-6">
+                      <div className="col-md-6" data-error={`period_start_${index}`}>
                         <label htmlFor={`periodStart-${index}`} className="form-label">
-                          Дата начала периода
+                          Дата начала периода <span className="text-danger">*</span>
                         </label>
                         <input
                           id={`periodStart-${index}`}
                           type="date"
-                          className="form-control"
+                          className={`form-control ${validationErrors[`period_start_${index}`] || validationErrors[`period_range_${index}`] ? 'is-invalid' : ''}`}
                           value={period.start_date}
                           onChange={(e) => updatePeriod(index, 'start_date', e.target.value)}
                           disabled={mutation.isPending}
                           required
+                          max={new Date(new Date().getFullYear() + 5, 11, 31).toISOString().split('T')[0]}
+                          min={new Date(new Date().getFullYear() - 5, 0, 1).toISOString().split('T')[0]}
                         />
+                        {validationErrors[`period_start_${index}`] && (
+                          <div className="invalid-feedback d-block">
+                            <i className="bi bi-exclamation-circle me-1"></i>
+                            {validationErrors[`period_start_${index}`]}
+                          </div>
+                        )}
                       </div>
-                      <div className="col-md-6">
+                      <div className="col-md-6" data-error={`period_end_${index}`}>
                         <label htmlFor={`periodEnd-${index}`} className="form-label">
-                          Дата окончания периода
+                          Дата окончания периода <span className="text-danger">*</span>
                         </label>
                         <input
                           id={`periodEnd-${index}`}
                           type="date"
-                          className="form-control"
+                          className={`form-control ${validationErrors[`period_end_${index}`] || validationErrors[`period_range_${index}`] ? 'is-invalid' : ''}`}
                           value={period.end_date}
                           onChange={(e) => updatePeriod(index, 'end_date', e.target.value)}
                           disabled={mutation.isPending}
                           required
+                          max={new Date(new Date().getFullYear() + 5, 11, 31).toISOString().split('T')[0]}
+                          min={new Date(new Date().getFullYear() - 5, 0, 1).toISOString().split('T')[0]}
                         />
+                        {validationErrors[`period_end_${index}`] && (
+                          <div className="invalid-feedback d-block">
+                            <i className="bi bi-exclamation-circle me-1"></i>
+                            {validationErrors[`period_end_${index}`]}
+                          </div>
+                        )}
                       </div>
                     </div>
                     
-                    {period.start_date && period.end_date && (
+                    {validationErrors[`period_range_${index}`] && (
+                      <div className="invalid-feedback d-block mt-2">
+                        <i className="bi bi-exclamation-circle me-1"></i>
+                        {validationErrors[`period_range_${index}`]}
+                      </div>
+                    )}
+                    
+                    {period.start_date && period.end_date && !validationErrors[`period_range_${index}`] && (
                       <div className="mt-2">
                         <small className="text-muted">
                           Длительность: {Math.ceil((new Date(period.end_date) - new Date(period.start_date)) / (1000 * 60 * 60 * 24))} дней
@@ -358,7 +521,7 @@ const CreateRequestForm = () => {
               </div>
 
               {/* Запрашиваемая сумма */}
-              <div className="mb-4">
+              <div className="mb-4" data-error="amount">
                 <label htmlFor="amount" className="form-label fw-semibold">
                   Запрашиваемая сумма снижения (руб.) <span className="text-danger">*</span>
                 </label>
@@ -366,9 +529,9 @@ const CreateRequestForm = () => {
                   <input
                     id="amount"
                     type="number"
-                    className="form-control"
+                    className={`form-control ${validationErrors.amount ? 'is-invalid' : ''}`}
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={(e) => handleFieldChange(setAmount, e.target.value)}
                     disabled={mutation.isPending}
                     required
                     min="0"
@@ -377,28 +540,43 @@ const CreateRequestForm = () => {
                   />
                   <span className="input-group-text">₽</span>
                 </div>
+                {validationErrors.amount && (
+                  <div className="invalid-feedback d-block">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.amount}
+                  </div>
+                )}
                 <div className="form-text">
                   Укажите сумму, на которую вы хотите снизить налоговые обязательства
                 </div>
               </div>
 
               {/* Обоснование */}
-              <div className="mb-4">
+              <div className="mb-4" data-error="description">
                 <label htmlFor="description" className="form-label fw-semibold">
                   Подробное обоснование <span className="text-danger">*</span>
                 </label>
                 <textarea
                   id="description"
-                  className="form-control"
+                  className={`form-control ${validationErrors.description ? 'is-invalid' : ''}`}
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(e) => handleFieldChange(setDescription, e.target.value)}
                   disabled={mutation.isPending}
                   required
                   rows="6"
                   placeholder="Опишите подробно причины для снижения налога, предоставьте необходимые обоснования и дополнительную информацию..."
                 />
+                {validationErrors.description && (
+                  <div className="invalid-feedback d-block">
+                    <i className="bi bi-exclamation-circle me-1"></i>
+                    {validationErrors.description}
+                  </div>
+                )}
                 <div className="form-text">
                   Максимально подробно опишите ситуацию, требующую снижения налоговой нагрузки
+                </div>
+                <div className="form-text text-end">
+                  {description.length} символов
                 </div>
               </div>
 
